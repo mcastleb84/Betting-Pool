@@ -95,3 +95,10 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke all on function public.bp_pay_handles(uuid) from public, anon;
 grant execute on function public.bp_pay_handles(uuid) to authenticated;
+
+-- ===== Points + automatic places (added later; safe to run on its own) =====
+alter table public.bp_entries add column if not exists score numeric(12,2);
+drop policy if exists "bp entries join" on public.bp_entries;
+create policy "bp entries join" on public.bp_entries for insert to anon, authenticated
+  with check (paid = false and place = 0 and paid_out = false and score is null);
+grant select (score) on public.bp_entries to anon, authenticated;

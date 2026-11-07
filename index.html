@@ -116,6 +116,22 @@ button.small{padding:8px 10px;font-size:13px}
 .linkish{background:none;border:0;padding:0;color:var(--money);font:inherit;text-decoration:underline;cursor:pointer}
 .hform select,.join select{flex:none;width:auto}
 .join{display:flex;flex-direction:column;gap:8px}
+:root{--silver-t:#626b76;--gold-1:#f6d36b;--gold-2:#c8911a;--silver-1:#eef1f4;--silver-2:#9aa3ad;--bronze-1:#e7a877;--bronze-2:#a5592a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--silver-t:#c7ced6}}
+:root[data-theme="dark"]{--silver-t:#c7ced6}
+.num.medal{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#1d1503;text-align:center;box-shadow:inset 0 -2px 0 rgba(0,0,0,.18),0 1px 3px rgba(0,0,0,.25)}
+.num.medal.gold{background:radial-gradient(circle at 35% 30%,var(--gold-1),var(--gold-2))}
+.num.medal.silver{background:radial-gradient(circle at 35% 30%,var(--silver-1),var(--silver-2))}
+.num.medal.bronze{background:radial-gradient(circle at 35% 30%,var(--bronze-1),var(--bronze-2))}
+.roster li.won small{font-weight:700}
+.roster li.gold small{color:var(--gold-2)} .roster li.silver small{color:var(--silver-t)} .roster li.bronze small{color:var(--bronze-2)}
+.place.gold{border-color:var(--gold-2);background:linear-gradient(160deg,color-mix(in srgb,var(--gold-1) 30%,var(--surface2)),var(--surface2) 60%)}
+.place.silver{border-color:var(--silver-2);background:linear-gradient(160deg,color-mix(in srgb,var(--silver-1) 35%,var(--surface2)),var(--surface2) 60%)}
+.place.bronze{border-color:var(--bronze-2);background:linear-gradient(160deg,color-mix(in srgb,var(--bronze-1) 30%,var(--surface2)),var(--surface2) 60%)}
+.place.gold .amt{color:var(--gold-2)} .place.silver .amt{color:var(--silver-t)} .place.bronze .amt{color:var(--bronze-2)}
+.pts{width:58px;flex:none;padding:6px 6px;font-size:14px;text-align:center}
+.ptsv{font-size:13px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.autonote{font-size:13px;color:var(--muted);margin:0}
 @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
 </style>
 </head>
@@ -144,7 +160,7 @@ const ORD=['1st','2nd','3rd'];
 const fmt=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:n%1?2:0,maximumFractionDigits:2}).format(n);
 const el=(tag,props={},kids=[])=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(props)){if(k==='text')e.textContent=v;else if(k==='class')e.className=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(k,v===true?'':v);}for(const c of [].concat(kids))if(c)e.append(c);return e;};
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
-const COLS='id,pool_id,name,paid,place,paid_out,created_at';
+const COLS='id,pool_id,name,paid,place,paid_out,score,created_at';
 const APPS={venmo:{label:'Venmo',pre:'@'},cashapp:{label:'Cash App',pre:'$'}};
 const cleanHandle=h=>String(h||'').trim().replace(/^[@$]+/,'').replace(/\s+/g,'');
 const okHandle=h=>/^[A-Za-z0-9_-]{1,30}$/.test(h);
@@ -157,6 +173,35 @@ function handleFields(idp,app,handle){
 }
 function readHandle(idp){const app=$(idp+'App').value,h=cleanHandle($(idp+'Handle').value);return {app,h};}
 // list: [{key,name,place,payApp,payHandle,paidOut}], save(item,patch) with camelCase patch keys
+const hasScore=x=>x.score!==null&&x.score!==undefined&&x.score!==''&&isFinite(+x.score);
+// Points decide places automatically: highest score is 1st; ties share a place (and split its prize).
+function applyRanking(list,nPlaces){
+  const scored=list.filter(hasScore);if(!scored.length)return false;
+  const vals=[...new Set(scored.map(x=>+x.score))].sort((a,b)=>b-a);
+  list.forEach(x=>{if(!hasScore(x)){x.place=0;return;}const r=vals.indexOf(+x.score)+1;x.place=r<=nPlaces?r:0;});
+  return true;
+}
+const MEDAL=['gold','silver','bronze'];
+function rosterList(list,pays,org,splits,auto,h){
+  const order=list.map((x,i)=>({x,i})).sort((a,b)=>{const pa=a.x.place||99,pb=b.x.place||99;if(pa!==pb)return pa-pb;const sa=hasScore(a.x)?+a.x.score:-Infinity,sb=hasScore(b.x)?+b.x.score:-Infinity;if(sa!==sb)return sb-sa;return a.i-b.i;});
+  return el('ul',{class:'roster'},order.map(({x},i)=>{
+    const acts=el('div',{class:'acts'});
+    if(org){
+      acts.append(el('button',{class:'paid'+(x.paid?' on':''),'aria-pressed':String(!!x.paid),text:x.paid?'Paid':'Not paid',onclick:()=>h.paid(x)}));
+      acts.append(el('input',{class:'pts',type:'number',inputmode:'decimal',step:'any',placeholder:'Pts','aria-label':'Points for '+x.name,value:hasScore(x)?String(+x.score):'',onchange:e=>{const v=e.target.value.trim();h.score(x,v===''?null:+v);}}));
+      if(!auto)acts.append(el('select',{'aria-label':'Finish for '+x.name,onchange:e=>h.place(x,+e.target.value||0)},[el('option',{value:'0',text:'—'}),...splits.map((_,j)=>el('option',{value:String(j+1),text:ORD[j],selected:x.place===j+1}))]));
+      acts.append(el('button',{class:'x','aria-label':'Remove '+x.name,text:'✕',onclick:()=>h.remove(x)}));
+    }else{
+      if(hasScore(x))acts.append(el('span',{class:'ptsv',text:(+x.score)+' pts'}));
+      acts.append(el('span',{class:'paid'+(x.paid?' on':''),text:x.paid?'Paid':'Not paid'}));
+    }
+    const pl=x.place&&pays[x.place-1]?x.place:0;
+    const tied=pl?list.filter(y=>y.place===pl).length:1;
+    const win=pl?ORD[pl-1]+' place · wins '+fmt(Math.round(pays[pl-1].amt/tied*100)/100):null;
+    const badge=pl?el('span',{class:'num medal '+MEDAL[pl-1],title:ORD[pl-1]+' place',text:String(pl)}):el('span',{class:'num',text:String(i+1)});
+    return el('li',{class:pl?'won '+MEDAL[pl-1]:''},[badge,el('span',{class:'pname'},[x.name,win?el('small',{text:win}):null,org&&hasScore(x)?null:null]),acts]);
+  }));
+}
 function payoutsView(list,pays,org,poolName,save){
   return el('section',{class:'block'},[el('h3',{text:'Payouts'}),el('div',{class:'places'},pays.map((x,i)=>{
     const ws=list.filter(e=>e.place===i+1),each=ws.length?Math.round(x.amt/ws.length*100)/100:x.amt;
@@ -178,7 +223,7 @@ function payoutsView(list,pays,org,poolName,save){
       }
       kids.push(row);
     });
-    return el('div',{class:'place'},kids);
+    return el('div',{class:'place '+(ws.length?MEDAL[i]:'')},kids);
   }))]);
 }
 const poolId=new URLSearchParams(location.search).get('pool');
@@ -195,7 +240,7 @@ async function loadPool(quiet){
   try{
     const [p,e]=await Promise.all([SB.from('bp_pools').select('*').eq('id',poolId).maybeSingle(),SB.from('bp_entries').select(COLS).eq('pool_id',poolId).order('created_at')]);
     if(p.error)throw p.error;if(e.error)throw e.error;
-    pool=p.data?norm(p.data):null;entries=(e.data||[]).map(x=>({...x,key:x.id,paidOut:!!x.paid_out,payApp:'venmo',payHandle:''}));
+    pool=p.data?norm(p.data):null;entries=(e.data||[]).map(x=>({...x,key:x.id,paidOut:!!x.paid_out,payApp:'venmo',payHandle:'',score:x.score===null||x.score===undefined?null:+x.score}));
     if(isOrg()){const h=await SB.rpc('bp_pay_handles',{pid:poolId});if(!h.error&&h.data)h.data.forEach(r=>{const x=entries.find(y=>y.id===r.id);if(x){x.payApp=r.pay_app==='cashapp'?'cashapp':'venmo';x.payHandle=r.pay_handle||'';}});}
     if(mode==='view')render();
     if(!quiet)status('');
@@ -284,19 +329,16 @@ function poolView(){
     f.append(el('section',{class:'block'},[el('h3',{text:'Invite your group'}),el('p',{class:'note',style:'margin:0',text:'Send this link. Anyone who opens it can add their name.'}),el('div',{class:'linkbox'},[el('input',{id:'shareLink',readonly:true,value:poolLink(pool.id),'aria-label':'Pool link',onfocus:e=>e.target.select()}),copyBtn(poolLink(pool.id),true)])]));
   }
   // payouts
+  const auto=applyRanking(entries,pool.splits.length);
   f.append(payoutsView(entries,pays,org,pool.name,(w,patch)=>{const row={};if('paidOut'in patch)row.paid_out=patch.paidOut;if('payApp'in patch)row.pay_app=patch.payApp;if('payHandle'in patch)row.pay_handle=patch.payHandle;Object.assign(w,patch);render();act(SB.from('bp_entries').update(row).eq('id',w.id),loadPool);}));
   // roster
-  const list=el('ul',{class:'roster'},entries.map((x,i)=>{
-    const acts=el('div',{class:'acts'});
-    if(org){
-      acts.append(el('button',{class:'paid'+(x.paid?' on':''),'aria-pressed':String(x.paid),text:x.paid?'Paid':'Not paid',onclick:()=>{x.paid=!x.paid;render();act(SB.from('bp_entries').update({paid:x.paid}).eq('id',x.id),loadPool);}}));
-      acts.append(el('select',{'aria-label':'Finish for '+x.name,onchange:e=>{x.place=+e.target.value;render();act(SB.from('bp_entries').update({place:x.place}).eq('id',x.id),loadPool);}},[el('option',{value:'0',text:'—'}),...pool.splits.map((_,j)=>el('option',{value:String(j+1),text:ORD[j],selected:x.place===j+1}))]));
-      acts.append(el('button',{class:'x','aria-label':'Remove '+x.name,text:'✕',onclick:()=>{entries=entries.filter(y=>y.id!==x.id);render();act(SB.from('bp_entries').delete().eq('id',x.id),loadPool);}}));
-    }else acts.append(el('span',{class:'paid'+(x.paid?' on':''),text:x.paid?'Paid':'Not paid'}));
-    const win=x.place&&pays[x.place-1]?ORD[x.place-1]+' · wins '+fmt(pays[x.place-1].amt):null;
-    return el('li',{},[el('span',{class:'num',text:String(i+1)}),el('span',{class:'pname'},[x.name,win?el('small',{text:win}):null]),acts]);
-  }));
+  const list=rosterList(entries,pays,org,pool.splits,auto,{
+    paid:x=>{x.paid=!x.paid;render();act(SB.from('bp_entries').update({paid:x.paid}).eq('id',x.id),loadPool);},
+    place:(x,v)=>{x.place=v;render();act(SB.from('bp_entries').update({place:v}).eq('id',x.id),loadPool);},
+    score:(x,v)=>{x.score=v;render();act(SB.from('bp_entries').update({score:v}).eq('id',x.id),loadPool);},
+    remove:x=>{entries=entries.filter(y=>y.id!==x.id);render();act(SB.from('bp_entries').delete().eq('id',x.id),loadPool);}});
   const kids=[el('h3',{text:'Who\'s in'})];
+  if(org&&n)kids.push(el('p',{class:'autonote',text:'Type each person\'s points. Highest score takes 1st place automatically.'}));
   kids.push(n?list:el('div',{class:'note',text:'Nobody yet. Be the first to join.'}));
   if(org){
     const inp=el('input',{id:'addName',placeholder:full?'Pool is full':'Add someone by name',maxlength:'40',autocomplete:'off',disabled:full,'aria-label':'Player name'});
