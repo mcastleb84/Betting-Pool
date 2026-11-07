@@ -132,6 +132,17 @@ button.small{padding:8px 10px;font-size:13px}
 .pts{width:58px;flex:none;padding:6px 6px;font-size:14px;text-align:center}
 .ptsv{font-size:13px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .autonote{font-size:13px;color:var(--muted);margin:0}
+details.terms{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+details.terms summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:2px}
+details.terms summary::-webkit-details-marker{display:none}
+details.terms .tt{font-family:var(--display);font-weight:700;font-size:22px;text-transform:uppercase;letter-spacing:.02em}
+details.terms .tt::after{content:" +";color:var(--muted)}
+details.terms[open] .tt::after{content:" –"}
+details.terms ol{margin:12px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:14px;line-height:1.45;max-width:62ch}
+details.terms li b{font-weight:700}
+.agree{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.35}
+.agree input{width:20px;height:20px;flex:none;margin-top:1px;accent-color:var(--money)}
+.agreed{font-size:12px;color:var(--money);font-weight:600}
 @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
 </style>
 </head>
@@ -160,7 +171,7 @@ const ORD=['1st','2nd','3rd'];
 const fmt=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:n%1?2:0,maximumFractionDigits:2}).format(n);
 const el=(tag,props={},kids=[])=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(props)){if(k==='text')e.textContent=v;else if(k==='class')e.className=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(k,v===true?'':v);}for(const c of [].concat(kids))if(c)e.append(c);return e;};
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
-const COLS='id,pool_id,name,paid,place,paid_out,score,created_at';
+const COLS='id,pool_id,name,paid,place,paid_out,score,agreed_at,created_at';
 const APPS={venmo:{label:'Venmo',pre:'@'},cashapp:{label:'Cash App',pre:'$'}};
 const cleanHandle=h=>String(h||'').trim().replace(/^[@$]+/,'').replace(/\s+/g,'');
 const okHandle=h=>/^[A-Za-z0-9_-]{1,30}$/.test(h);
@@ -201,6 +212,27 @@ function rosterList(list,pays,org,splits,auto,h,low){
     const badge=pl?el('span',{class:'num medal '+MEDAL[pl-1],title:ORD[pl-1]+' place',text:String(pl)}):el('span',{class:'num',text:String(i+1)});
     return el('li',{class:pl?'won '+MEDAL[pl-1]:''},[badge,el('span',{class:'pname'},[x.name,win?el('small',{text:win}):null,org&&hasScore(x)?null:null]),acts]);
   }));
+}
+// Pool Terms – Promise to Pay. c = {name, buyIn, payTo, splits, low}
+function termsItems(c){
+  const split=c.splits.length===1?'Winner takes the whole pot.':'The pot is split '+c.splits.map((s,i)=>s+'% to '+ORD[i]+' place').join(', ')+'.';
+  return [
+    ['Buy-in','Each player promises to pay the '+fmt(c.buyIn)+' buy-in to the organizer'+(c.payTo?' ('+c.payTo+')':'')+' before the game starts. A player who hasn\'t paid by then can be removed and can\'t win a prize.'],
+    ['The pot','Every buy-in goes into the pot. The organizer keeps no cut: all the money collected is paid out to the winners.'],
+    ['Prizes',split+' Places are set by the scores the organizer posts on this page, and the '+(c.low?'lowest':'highest')+' score wins. Players tied for a place split that place\'s prize equally.'],
+    ['When victory is confirmed','A win is confirmed once the game is final and the organizer posts the final scores here. Anyone in the pool has 24 hours after that to point out a mistake to the organizer. After 24 hours, the results are final.'],
+    ['Promise to pay the winners','Once victory is confirmed, the organizer promises to pay each winner their full prize within 48 hours, to the Venmo or Cash App username the winner gave, and to mark it "Paid out" on this page.'],
+    ['If the pool is canceled','If the game is canceled or the pool can\'t be decided, the organizer returns every buy-in in full within 48 hours.'],
+    ['Fair play','One entry per person unless the organizer allows more. Scores come only from the official game result.'],
+    ['Who can join','You must be 18 or older, and betting pools must be allowed where you live.'],
+    ['A personal agreement','This is an agreement between the people in this pool. This website, Venmo and Cash App are only tools. They don\'t hold the money or guarantee any payment.'],
+  ];
+}
+function termsView(c,open){
+  const d=el('details',{class:'terms block',id:'terms',open:!!open},[
+    el('summary',{},[el('span',{class:'tt',text:'Pool terms · Promise to pay'}),el('span',{class:'note',text:'By joining '+c.name+', every player and the organizer agree to these terms.'})]),
+    el('ol',{},termsItems(c).map(([h,b])=>el('li',{},[el('b',{text:h+'. '}),b])))]);
+  return d;
 }
 function payoutsView(list,pays,org,poolName,save){
   return el('section',{class:'block'},[el('h3',{text:'Payouts'}),el('div',{class:'places'},pays.map((x,i)=>{
@@ -317,13 +349,14 @@ function poolView(){
     else{
       const inp=el('input',{id:'joinName',placeholder:'Your name',maxlength:'40',autocomplete:'name','aria-label':'Your name'});
       const join=async()=>{const v=inp.value.trim();if(!v){status('Type your name to join.',true);return;}
+        if(!$('agreeTerms').checked){status('Check the box to agree to the pool terms before you join.',true);$('agreeTerms').focus();return;}
         const hd=readHandle('join');if(hd.h&&!okHandle(hd.h)){status('That username has characters Venmo and Cash App don\'t use. Use letters, numbers, - or _.',true);return;}
         status('Joining…');const id=crypto.randomUUID();
-        const r=await SB.from('bp_entries').insert({id,pool_id:pool.id,name:v,pay_app:hd.h?hd.app:null,pay_handle:hd.h||null});
+        const r=await SB.from('bp_entries').insert({id,pool_id:pool.id,name:v,pay_app:hd.h?hd.app:null,pay_handle:hd.h||null,agreed_at:new Date().toISOString()});
         if(r.error){status(friendly(r.error),true);return;}
         store.set('bp-joined-'+pool.id,id);status('');await loadPool();};
       inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();join();}});
-      f.append(el('section',{class:'block'},[el('h3',{text:'Join this pool'}),el('p',{class:'note',style:'margin:0',text:'Add your name, then send your '+fmt(pool.buy_in)+' buy-in'+(pool.pay_info?' to '+pool.pay_info:' to the organizer')+'. The organizer marks you paid.'}),el('div',{class:'join'},[inp,el('div',{class:'lbl',text:'If you win, get paid on'}),el('div',{class:'add'},handleFields('join','venmo','')),el('button',{class:'primary',text:'Join for '+fmt(pool.buy_in),onclick:join})])]));
+      f.append(el('section',{class:'block'},[el('h3',{text:'Join this pool'}),el('p',{class:'note',style:'margin:0',text:'Add your name, then send your '+fmt(pool.buy_in)+' buy-in'+(pool.pay_info?' to '+pool.pay_info:' to the organizer')+'. The organizer marks you paid.'}),el('div',{class:'join'},[inp,el('div',{class:'lbl',text:'If you win, get paid on'}),el('div',{class:'add'},handleFields('join','venmo','')),el('label',{class:'agree'},[el('input',{type:'checkbox',id:'agreeTerms'}),el('span',{},['I agree to the ',el('a',{href:'#terms',text:'pool terms',onclick:e=>{e.preventDefault();const d=$('terms');d.open=true;d.scrollIntoView({behavior:'smooth'});}}),', including paying my '+fmt(pool.buy_in)+' buy-in before the game starts.'])]),el('button',{class:'primary',text:'Join for '+fmt(pool.buy_in),onclick:join})])]));
     }
   }else{
     f.append(el('section',{class:'block'},[el('h3',{text:'Invite your group'}),el('p',{class:'note',style:'margin:0',text:'Send this link. Anyone who opens it can add their name.'}),el('div',{class:'linkbox'},[el('input',{id:'shareLink',readonly:true,value:poolLink(pool.id),'aria-label':'Pool link',onfocus:e=>e.target.select()}),copyBtn(poolLink(pool.id),true)])]));
@@ -347,6 +380,7 @@ function poolView(){
     kids.push(el('div',{class:'add'},[inp,el('button',{class:'primary',text:'Add',disabled:full,onclick:add})]));
   }
   f.append(el('section',{class:'block'},kids));
+  f.append(termsView({name:pool.name,buyIn:pool.buy_in,payTo:pool.pay_info,splits:pool.splits,low:pool.low_wins}));
   if(org){
     f.append(el('div',{class:'foot'},[
       el('button',{class:'ghost',text:'Edit pool',onclick:()=>{mode='form';render();}}),

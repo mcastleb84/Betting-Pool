@@ -105,3 +105,10 @@ grant select (score) on public.bp_entries to anon, authenticated;
 
 -- ===== Lowest-score-wins setting (added later; safe to run on its own) =====
 alter table public.bp_pools add column if not exists low_wins boolean not null default false;
+
+-- ===== Pool terms agreement (added later; safe to run on its own) =====
+alter table public.bp_entries add column if not exists agreed_at timestamptz;
+drop policy if exists "bp entries join" on public.bp_entries;
+create policy "bp entries join" on public.bp_entries for insert to anon, authenticated
+  with check (paid = false and place = 0 and paid_out = false and score is null and agreed_at is not null);
+grant select (agreed_at) on public.bp_entries to anon, authenticated;
