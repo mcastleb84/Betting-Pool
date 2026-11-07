@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pool Board</title>
 <meta name="theme-color" content="#17784a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Pool Board">
+<meta name="description" content="Betting pools with friends: buy-ins, who's in, the pot, payouts and game chat.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Figtree:wght@400;500;600;700&display=swap">
 <style>
@@ -169,6 +177,32 @@ form.grid label.chk input{width:20px;height:20px;flex:none;accent-color:var(--mo
 .namebox{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media (max-width:420px){.namebox{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+.topacts{display:flex;gap:8px;flex-wrap:wrap}
+.iosinstall{background:var(--surface);border:1px solid var(--money);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.iosinstall ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px;font-size:15px}
+.iosinstall button{align-self:flex-start}
+/* Game chat: floating button + bottom sheet, kept outside #main so live refreshes never wipe a half-typed message. */
+body.haschat .wrap{padding-bottom:96px}
+.chatfab{position:fixed;z-index:900;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));display:inline-flex;gap:8px;align-items:center;background:var(--ink);color:var(--bg);border-radius:999px;padding:12px 18px;font:700 15px var(--body);box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.chatfab .badge{min-width:22px;padding:1px 7px;border-radius:99px;background:var(--money);color:var(--on-money);font-size:12px;text-align:center}
+.chatsheet{position:fixed;z-index:950;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:520px;height:min(72vh,560px);background:var(--surface);border:1px solid var(--line);border-bottom:0;border-radius:18px 18px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.25);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (min-width:700px){.chatsheet{left:auto;transform:none;right:24px;bottom:24px;width:380px;border-bottom:1px solid var(--line);border-radius:18px}}
+.chathead{display:flex;align-items:center;gap:10px;padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+.chathead h3{margin:0;font-family:var(--display);font-weight:800;font-size:22px;text-transform:uppercase;letter-spacing:.02em;line-height:1}
+.chathead .pn{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.chathead>div{flex:1;min-width:0}
+.chatlist{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px;overscroll-behavior:contain}
+.msg{max-width:82%;align-self:flex-start;background:var(--surface2);border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:7px 11px;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--money-soft);border-color:transparent;border-radius:14px 14px 4px 14px}
+.msg .mh{display:flex;gap:8px;align-items:baseline;font-size:12px;color:var(--muted)}
+.msg .mh b{color:var(--ink);font-weight:700}
+.msg .mt{font-size:15px;line-height:1.4;white-space:pre-wrap}
+.msg .del{margin-left:auto;background:none;border:0;padding:0 2px;font-size:12px;color:var(--muted)}
+.chatempty{margin:auto;text-align:center;color:var(--muted);font-size:14px;max-width:26ch}
+.chatform{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+.chatform input{flex:1;min-width:0}
+.chatnote{padding:0 14px 8px;font-size:12px;color:var(--warn)}
+.chatnote:empty{display:none}
 </style>
 </head>
 <body>
@@ -178,10 +212,23 @@ form.grid label.chk input{width:20px;height:20px;flex:none;accent-color:var(--mo
       <h1 id="siteName"><a href="./" style="color:inherit;text-decoration:none">Pool Board</a></h1>
       <p class="sub" id="who">Buy-ins, who's in, and what the pot pays out.</p>
     </div>
-    <button class="ghost" id="outBtn" hidden>Log out</button>
+    <div class="topacts"><button class="primary" id="installBtn" hidden>Get the app</button><button class="ghost" id="outBtn" hidden>Log out</button></div>
+  </div>
+  <div class="iosinstall" id="iosHelp" hidden role="dialog" aria-labelledby="iosTitle">
+    <strong id="iosTitle">Add Pool Board to your home screen</strong>
+    <ol><li>Tap the <b>Share</b> button <span aria-hidden="true">(the square with the arrow)</span> in Safari.</li><li>Scroll down and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>. Pool Board opens like any other app.</li></ol>
+    <button class="ghost small" id="iosClose">Got it</button>
   </div>
   <div id="main"><div class="empty"><strong>Loading…</strong></div></div>
   <div class="status" id="status" role="status"></div>
+</div>
+<button class="chatfab" id="chatFab" hidden aria-haspopup="dialog">💬 Game chat <span class="badge" id="chatBadge" hidden></span></button>
+<div class="chatsheet" id="chatSheet" role="dialog" aria-labelledby="chatTitle" hidden>
+  <div class="chathead"><div><h3 id="chatTitle">Game chat</h3><div class="pn" id="chatPool"></div></div><button class="ghost small" id="chatClose" aria-label="Close chat">Close</button></div>
+  <div class="chatlist" id="chatList" aria-live="polite"></div>
+  <div class="chatnote" id="chatNote" role="status"></div>
+  <form class="chatform" id="chatNameForm" hidden><input id="chatName" maxlength="30" autocomplete="nickname" placeholder="Your name in the chat" aria-label="Your name in the chat"><button class="primary" type="submit">Join chat</button></form>
+  <form class="chatform" id="chatForm" hidden><input id="chatInput" maxlength="280" autocomplete="off" placeholder="Say something…" aria-label="Chat message"><button class="primary" type="submit">Send</button></form>
 </div>
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -375,6 +422,7 @@ async function loadMine(){
 async function act(promise,after){status('Saving…');const r=await promise;if(r&&r.error){status(friendly(r.error),true);}else status('');if(after)await after();}
 
 function render(){
+  setTimeout(renderChat,0);
   $('outBtn').hidden=!me;
   const main=$('main');
   if(!SB){main.replaceChildren(el('div',{class:'slip'},[el('div',{class:'empty'},[el('strong',{text:'Not connected yet'}),el('span',{text:'Add your Supabase URL and key to config.js.'})])]));return;}
@@ -520,11 +568,83 @@ function formView(p){
 
 $('outBtn').addEventListener('click',async()=>{await SB.auth.signOut();});
 
+// ---- Install as an app: Android/desktop get the browser's install prompt; iPhone gets Add to Home Screen steps.
+let installEvt=null;
+const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+function showInstall(){$('installBtn').hidden=standalone()||!(installEvt||isIOS());}
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;showInstall();});
+addEventListener('appinstalled',()=>{installEvt=null;showInstall();status('Pool Board is installed. Open it from your home screen.');});
+$('installBtn').addEventListener('click',async()=>{
+  if(installEvt){installEvt.prompt();try{await installEvt.userChoice}catch(e){}installEvt=null;showInstall();return;}
+  $('iosHelp').hidden=false;$('iosClose').focus();});
+$('iosClose').addEventListener('click',()=>{$('iosHelp').hidden=true;$('installBtn').focus();});
+showInstall();
+if('serviceWorker' in navigator&&location.protocol==='https:')addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{});});
+
+// ---- Game chat (one per pool). Anyone with the pool link can post; the organizer can delete messages.
+let chatOpen=false,msgs=[],chatReady=false,chatOff=false,chatLive=false,chatPoll=null;
+const clientId=(()=>{let v=store.get('pool-client');if(!v){v=Math.random().toString(36).slice(2)+Date.now().toString(36);store.set('pool-client',v);}return v;})();
+const myName=()=>(store.get('pool-chat-name')||'').trim();
+const seenKey=()=>'chat-seen-'+poolId;
+const tfmt=t=>{const d=new Date(t),now=new Date(),time=d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});return d.toDateString()===now.toDateString()?time:d.toLocaleDateString([],{month:'short',day:'numeric'})+' '+time;};
+function chatNote(m){$('chatNote').textContent=m||'';}
+function renderChat(){
+  const fab=$('chatFab'),sh=$('chatSheet');
+  const show=!!(SB&&poolId&&pool&&!chatOff&&mode==='view');
+  document.body.classList.toggle('haschat',show);
+  if(!show){fab.hidden=true;sh.hidden=true;return;}
+  const seen=+store.get(seenKey())||0,last=msgs.length?Date.parse(msgs[msgs.length-1].created_at):0;
+  if(chatOpen&&last>seen)store.set(seenKey(),String(last));
+  const unread=chatOpen?0:msgs.filter(m=>Date.parse(m.created_at)>seen&&m.client_id!==clientId).length;
+  fab.hidden=chatOpen;sh.hidden=!chatOpen;
+  const b=$('chatBadge');b.hidden=!unread;b.textContent=unread>9?'9+':String(unread);
+  fab.setAttribute('aria-label','Game chat'+(unread?', '+unread+' new':''));
+  if(!chatOpen)return;
+  $('chatPool').textContent=pool.name;
+  const named=!!myName();$('chatNameForm').hidden=named;$('chatForm').hidden=!named;
+  const list=$('chatList'),atBottom=list.scrollHeight-list.scrollTop-list.clientHeight<60;
+  if(!msgs.length)list.replaceChildren(el('div',{class:'chatempty',text:chatReady?'No messages yet. Start the trash talk for '+pool.name+'.':'Loading chat…'}));
+  else list.replaceChildren(...msgs.map(m=>{const mine=m.client_id===clientId;
+    return el('div',{class:'msg'+(mine?' me':'')},[el('div',{class:'mh'},[el('b',{text:mine?'You':m.name}),el('span',{text:tfmt(m.created_at)}),isOrg()?el('button',{class:'del','aria-label':'Delete message',text:'✕',onclick:()=>delMsg(m)}):null]),el('div',{class:'mt',text:m.body})]);}));
+  if(atBottom)list.scrollTop=list.scrollHeight;
+}
+function addMsg(m){if(!m||m.pool_id!==poolId||msgs.some(x=>x.id===m.id))return;msgs.push(m);msgs.sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at));if(msgs.length>200)msgs=msgs.slice(-200);renderChat();}
+async function loadChat(){
+  const r=await SB.from('bp_messages').select('id,pool_id,name,body,client_id,created_at').eq('pool_id',poolId).order('created_at',{ascending:false}).limit(100);
+  if(r.error){if(/bp_messages|does not exist|schema cache/i.test(r.error.message||'')){chatOff=true;renderChat();return;}chatNote('Chat can\'t be reached right now.');return;}
+  msgs=(r.data||[]).reverse();chatReady=true;chatNote('');renderChat();
+}
+async function sendMsg(body){
+  const row={id:(crypto.randomUUID?crypto.randomUUID():undefined),pool_id:poolId,name:myName(),body,client_id:clientId};
+  if(!row.id)delete row.id;
+  const r=await SB.from('bp_messages').insert(row).select('id,pool_id,name,body,client_id,created_at').single();
+  if(r.error){chatNote(/busy/i.test(r.error.message||'')?'Chat is busy. Wait a few seconds and try again.':'Message didn\'t send. Check your connection and try again.');$('chatInput').value=$('chatInput').value||body;return;}
+  chatNote('');addMsg(r.data);const l=$('chatList');l.scrollTop=l.scrollHeight;
+}
+async function delMsg(m){msgs=msgs.filter(x=>x.id!==m.id);renderChat();const r=await SB.from('bp_messages').delete().eq('id',m.id);if(r.error){chatNote('Couldn\'t delete that message.');loadChat();}}
+function startChat(){
+  if(!SB||!poolId)return;
+  loadChat();
+  SB.channel('chat-'+poolId)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'bp_messages',filter:'pool_id=eq.'+poolId},p=>addMsg(p.new))
+    .on('postgres_changes',{event:'DELETE',schema:'public',table:'bp_messages'},p=>{const id=p.old&&p.old.id;if(id&&msgs.some(x=>x.id===id)){msgs=msgs.filter(x=>x.id!==id);renderChat();}})
+    .subscribe(s=>{chatLive=s==='SUBSCRIBED';});
+  // Backup in case live updates are blocked on someone's network.
+  chatPoll=setInterval(()=>{if(!chatLive&&!chatOff&&document.visibilityState==='visible')loadChat();},8000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!chatOff)loadChat();});
+}
+$('chatFab').addEventListener('click',()=>{chatOpen=true;renderChat();setTimeout(()=>{const l=$('chatList');l.scrollTop=l.scrollHeight;const i=myName()?$('chatInput'):$('chatName');if(!myName()&&me&&isOrg()&&!i.value)i.value='Organizer';i.focus();},0);});
+$('chatClose').addEventListener('click',()=>{chatOpen=false;renderChat();$('chatFab').focus();});
+$('chatSheet').addEventListener('keydown',e=>{if(e.key==='Escape'){chatOpen=false;renderChat();$('chatFab').focus();}});
+$('chatNameForm').addEventListener('submit',e=>{e.preventDefault();const v=$('chatName').value.trim().slice(0,30);if(!v){chatNote('Type the name people will see.');return;}store.set('pool-chat-name',v);chatNote('');renderChat();setTimeout(()=>$('chatInput').focus(),0);});
+$('chatForm').addEventListener('submit',e=>{e.preventDefault();const i=$('chatInput'),v=i.value.trim().slice(0,280);if(!v)return;i.value='';sendMsg(v);});
+
 async function start(){
   if(!SB){render();return;}
   const {data}=await SB.auth.getSession();me=data.session?data.session.user:null;
   SB.auth.onAuthStateChange((ev,s)=>{const was=me&&me.id;me=s?s.user:null;if((me&&me.id)!==was){mode='view';if(poolId)render();else if(me)loadMine();else render();}});
-  if(poolId){await loadPool();
+  if(poolId){await loadPool();startChat();
     // keep the pot live while the page is open
     timer=setInterval(()=>{if(document.visibilityState==='visible'&&mode==='view')loadPool(true);},10000);
     document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadPool(true);});
