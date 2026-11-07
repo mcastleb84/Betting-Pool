@@ -178,6 +178,22 @@ form.grid label.chk input{width:20px;height:20px;flex:none;accent-color:var(--mo
 @media (max-width:420px){.namebox{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
 .topacts{display:flex;gap:8px;flex-wrap:wrap}
+.sports{gap:6px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.sports .tab{font:700 15px var(--body);padding:10px 16px;display:inline-flex;gap:7px;align-items:center}
+.tab .ct{font-size:12px;font-weight:700;min-width:20px;padding:1px 6px;border-radius:99px;background:var(--surface2);color:var(--muted);text-align:center}
+.tab[aria-pressed="true"] .ct{background:var(--money);color:var(--on-money)}
+.sportnote{grid-column:1/-1;font-size:13px;color:var(--muted);margin:0;padding:10px 12px;border-radius:10px;background:var(--surface2);border:1px solid var(--line)}
+.sportnote b{color:var(--ink)}
+.teampick{grid-column:1/-1;display:flex;flex-direction:column;gap:8px}
+.thead{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.thead .lbl{margin-right:auto}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;max-height:320px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:var(--surface2)}
+@media (max-width:420px){.tgrid{grid-template-columns:1fr}}
+form.grid label.tchk{flex-direction:row;align-items:center;gap:10px;color:var(--ink);font-size:15px;font-weight:500;padding:8px 0;cursor:pointer}
+form.grid label.tchk input{width:20px;height:20px;flex:none;accent-color:var(--money)}
+.tsel{display:flex;flex-direction:column;gap:6px}
+.tchips{display:flex;flex-wrap:wrap;gap:6px}
+.tchip{font-size:13px;font-weight:600;padding:5px 10px;border-radius:999px;background:var(--money-soft);color:var(--money)}
 .iosinstall{background:var(--surface);border:1px solid var(--money);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
 .iosinstall ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px;font-size:15px}
 .iosinstall button{align-self:flex-start}
@@ -343,32 +359,67 @@ function picksView(list,k,org,setWinner){
     return el('div',{class:'pick'+(won?' gold':'')+(k.unique&&ws.length?' gone':'')},[el('div',{class:'pn',text:(won?'🏆 ':'')+v}),el('div',{class:'who',text:ws.length?ws.map(x=>x.name).join(', '):(k.unique?'Open':'No picks yet')})]);})));
   return el('section',{class:'block'},kids);
 }
-// Organizer form: label, how many teams (makes that many name boxes), how many each player picks.
+const LEAGUES={
+ nfl:{label:'NFL',teams:['Arizona Cardinals','Atlanta Falcons','Baltimore Ravens','Buffalo Bills','Carolina Panthers','Chicago Bears','Cincinnati Bengals','Cleveland Browns','Dallas Cowboys','Denver Broncos','Detroit Lions','Green Bay Packers','Houston Texans','Indianapolis Colts','Jacksonville Jaguars','Kansas City Chiefs','Las Vegas Raiders','Los Angeles Chargers','Los Angeles Rams','Miami Dolphins','Minnesota Vikings','New England Patriots','New Orleans Saints','New York Giants','New York Jets','Philadelphia Eagles','Pittsburgh Steelers','San Francisco 49ers','Seattle Seahawks','Tampa Bay Buccaneers','Tennessee Titans','Washington Commanders']},
+ nba:{label:'NBA',teams:['Atlanta Hawks','Boston Celtics','Brooklyn Nets','Charlotte Hornets','Chicago Bulls','Cleveland Cavaliers','Dallas Mavericks','Denver Nuggets','Detroit Pistons','Golden State Warriors','Houston Rockets','Indiana Pacers','LA Clippers','Los Angeles Lakers','Memphis Grizzlies','Miami Heat','Milwaukee Bucks','Minnesota Timberwolves','New Orleans Pelicans','New York Knicks','Oklahoma City Thunder','Orlando Magic','Philadelphia 76ers','Phoenix Suns','Portland Trail Blazers','Sacramento Kings','San Antonio Spurs','Toronto Raptors','Utah Jazz','Washington Wizards']},
+ mlb:{label:'MLB',teams:['Arizona Diamondbacks','Athletics','Atlanta Braves','Baltimore Orioles','Boston Red Sox','Chicago Cubs','Chicago White Sox','Cincinnati Reds','Cleveland Guardians','Colorado Rockies','Detroit Tigers','Houston Astros','Kansas City Royals','Los Angeles Angels','Los Angeles Dodgers','Miami Marlins','Milwaukee Brewers','Minnesota Twins','New York Mets','New York Yankees','Philadelphia Phillies','Pittsburgh Pirates','San Diego Padres','San Francisco Giants','Seattle Mariners','St. Louis Cardinals','Tampa Bay Rays','Texas Rangers','Toronto Blue Jays','Washington Nationals']},
+ nhl:{label:'NHL',teams:['Anaheim Ducks','Boston Bruins','Buffalo Sabres','Calgary Flames','Carolina Hurricanes','Chicago Blackhawks','Colorado Avalanche','Columbus Blue Jackets','Dallas Stars','Detroit Red Wings','Edmonton Oilers','Florida Panthers','Los Angeles Kings','Minnesota Wild','Montreal Canadiens','Nashville Predators','New Jersey Devils','New York Islanders','New York Rangers','Ottawa Senators','Philadelphia Flyers','Pittsburgh Penguins','San Jose Sharks','Seattle Kraken','St. Louis Blues','Tampa Bay Lightning','Toronto Maple Leafs','Utah Mammoth','Vancouver Canucks','Vegas Golden Knights','Washington Capitals','Winnipeg Jets']}
+};
+const SPORT_NAME={golf:'Golf',tennis:'Tennis',custom:''};Object.entries(LEAGUES).forEach(([k,v])=>SPORT_NAME[k]=v.label);
+const INDIV={golf:'Golfer',tennis:'Player'};
+// Each sport gets its own tab; pools are created and listed under the tab for their sport.
+const SPORT_TABS=[['nfl','Football'],['nba','Basketball'],['mlb','Baseball'],['nhl','Hockey'],['golf','Golf'],['tennis','Tennis'],['custom','Other']];
+const TAB_NAME=Object.fromEntries(SPORT_TABS);
+const sportWord=k=>k==='custom'?'custom':(TAB_NAME[k]||'custom').toLowerCase();
+let curSport=store.get('pool-sport');if(!TAB_NAME[curSport])curSport='nfl';
+// Organizer form. Pro leagues: check the teams in the pool. Golf, tennis and Other: type each name.
 function pickFields(p){
-  const names=p&&p.picks?p.picks.slice():[];
-  const label=el('input',{id:'fPickLabel',maxlength:'20',placeholder:'Team',value:p&&p.pickLabel?p.pickLabel:'Team'});
+  const sp=p?(p.sport||'custom'):curSport,lg=LEAGUES[sp],indiv=INDIV[sp];
+  const names=p&&p.picks&&!lg?p.picks.slice():[];
+  const sport=el('input',{type:'hidden',id:'fSport',value:sp});
+  const label=el('input',{id:'fPickLabel',maxlength:'20',placeholder:'Team',value:indiv||(p&&p.pickLabel)||'Team'});
   const count=el('input',{id:'fCount',type:'number',inputmode:'numeric',min:'0',max:'64',step:'1',placeholder:'0 = no picks',value:names.length?String(names.length):''});
-  const each=el('input',{id:'fEach',type:'number',inputmode:'numeric',min:'1',max:'64',step:'1',value:String(p&&p.picksEach||1)});
+  const each=el('input',{id:'fEach',type:'number',inputmode:'numeric',min:'1',max:'64',step:'1',value:String(p?p.picksEach||1:(indiv?3:1))});
   const box=el('div',{class:'full namebox',id:'fNames'});
   const lc=el('span'),le=el('span'),lu=el('span');
-  function draw(){const L=(label.value.trim()||'Team');lc.textContent='Number of '+plural(L).toLowerCase();le.textContent=plural(L)+' each player must pick';lu.textContent='Each '+L.toLowerCase()+' can only be picked once';
+  const kids=[sport];
+  if(lg){
+    const teamSet=new Set(p?p.picks.filter(t=>lg.teams.includes(t)):[]);
+    const selWrap=el('div',{class:'tsel'});
+    const cbs=lg.teams.map(t=>{const cb=el('input',{type:'checkbox',value:t,class:'fTeamCb'});cb.checked=teamSet.has(t);cb.addEventListener('change',()=>{if(cb.checked)teamSet.add(t);else teamSet.delete(t);showSel();});return cb;});
+    function showSel(){const on=lg.teams.filter(t=>teamSet.has(t));selWrap.replaceChildren(el('div',{class:'lbl',text:'Selected teams ('+on.length+')'}),on.length?el('div',{class:'tchips'},on.map(t=>el('span',{class:'tchip',text:t}))):el('div',{class:'note',text:'No teams checked yet.'}));}
+    function sync(){cbs.forEach(cb=>{cb.checked=teamSet.has(cb.value);});showSel();}
+    showSel();
+    kids.push(el('p',{class:'sportnote'},[el('b',{text:'All '+lg.teams.length+' '+lg.label+' teams'}),' are listed below. Check the ones in this pool; players pick from those.']),
+      el('div',{class:'teampick',id:'fTeams'},[el('div',{class:'thead'},[el('span',{class:'lbl',text:'Check the teams in this pool'}),el('button',{type:'button',class:'linkish',text:'Select all',onclick:()=>{lg.teams.forEach(t=>teamSet.add(t));sync();}}),el('button',{type:'button',class:'linkish',text:'Clear',onclick:()=>{teamSet.clear();sync();}})]),
+        el('div',{class:'tgrid'},cbs.map((cb,i)=>el('label',{class:'tchk'},[cb,el('span',{text:lg.teams[i]})]))),selWrap]));
+  }
+  function draw(){const L=lg?'Team':(indiv||label.value.trim()||'Team');
+    lc.textContent='Number of '+plural(L).toLowerCase();le.textContent=plural(L)+' each player '+(indiv?'can pick (most)':'must pick');lu.textContent='Each '+L.toLowerCase()+' can only be picked once';
+    if(lg)return;
     const n=Math.max(0,Math.min(64,parseInt(count.value,10)||0));
     [...box.querySelectorAll('input')].forEach((inp,i)=>{names[i]=inp.value;});
     box.replaceChildren(...Array.from({length:n},(_,i)=>el('label',{},[L+' '+(i+1),el('input',{class:'fTeam',maxlength:'40',placeholder:L+' name',value:names[i]||''})])));
     box.hidden=!n;}
   count.addEventListener('input',draw);label.addEventListener('input',draw);draw();
-  return [el('label',{},['People pick a',label]),el('label',{},[lc,count]),el('label',{},[le,each]),
-    el('label',{class:'chk'},[el('input',{type:'checkbox',id:'fUnique',checked:!!(p&&p.uniquePicks)}),lu]),box];
+  if(indiv)kids.push(el('p',{class:'sportnote',text:'Type in each '+indiv.toLowerCase()+' in this pool. Players pick from your list.'}));
+  if(!lg){if(!indiv)kids.push(el('label',{},['People pick a',label]));else{label.type='hidden';kids.push(label);}kids.push(el('label',{},[lc,count]));}
+  kids.push(el('label',{},[le,each]),el('label',{class:'chk'},[el('input',{type:'checkbox',id:'fUnique',checked:!!(p&&p.uniquePicks)}),lu]));
+  if(!lg)kids.push(box);
+  return kids;
 }
 function readPickFields(){
-  const label=($('fPickLabel').value.trim()||'Team').slice(0,20);
+  const sp=$('fSport').value,lg=LEAGUES[sp],each=Math.max(1,parseInt($('fEach').value,10)||1);
+  if(lg){const on=new Set([...document.querySelectorAll('#fTeams .fTeamCb:checked')].map(i=>i.value)),picks=lg.teams.filter(t=>on.has(t));
+    return {sport:sp,picks,label:'Team',unique:$('fUnique').checked,each:Math.min(each,Math.max(1,picks.length)),error:!picks.length?'Check at least one team for this pool.':each>picks.length?'Players can’t pick more teams than you checked.':''};}
+  const label=(INDIV[sp]||$('fPickLabel').value.trim()||'Team').slice(0,20);
   const raw=[...document.querySelectorAll('#fNames .fTeam')].map(i=>i.value.trim());
-  const n=raw.length,picks=cleanPicks(raw),each=Math.max(1,parseInt($('fEach').value,10)||1);
+  const n=raw.length,picks=cleanPicks(raw);
   let error='';
   if(n&&raw.some(v=>!v))error='Fill in all '+nOf(n,label)+'.';
   else if(n&&picks.length<n)error='Each '+label.toLowerCase()+' needs a different name.';
   else if(n&&each>n)error='Players can\'t pick more '+plural(label).toLowerCase()+' than the pool has.';
-  return {picks,label,unique:$('fUnique').checked,each:n?each:1,error};
+  return {sport:sp,picks,label,unique:$('fUnique').checked,each:n?each:1,error};
 }
 function payoutsView(list,pays,org,poolName,save){
   return el('section',{class:'block'},[el('h3',{text:'Payouts'}),el('div',{class:'places'},pays.map((x,i)=>{
@@ -401,7 +452,7 @@ let me=null,pool=null,entries=[],mode='view',confirmDel=false,mine=[],timer=null
 function status(msg,err){const s=$('status');s.textContent=msg||'';s.className='status'+(err?' err':'');}
 const friendly=e=>{const m=(e&&e.message)||'';if(/full/i.test(m))return 'This pool is full.';if(/taken/i.test(m))return 'Someone already picked that. Choose another.';if(/pick/i.test(m)&&/choose|allowed|valid|policy/i.test(m))return 'Choose one of the listed picks.';if(/row-level security/i.test(m))return 'That didn\'t go through. Check your pick and try again.';if(/Invalid login/i.test(m))return 'That email and password don\'t match. Try again.';if(/fetch|network/i.test(m))return 'Can\'t reach the server. Check your connection and try again.';return m||'Something went wrong. Try again.';};
 const isOrg=()=>!!(me&&pool&&pool.organizer_id===me.id);
-const norm=p=>({...p,buy_in:+p.buy_in,splits:(p.splits&&p.splits.length?p.splits:[100]).map(Number),max_players:p.max_players||0,low_wins:!!p.low_wins,picks:cleanPicks(p.picks),pickLabel:String(p.pick_label||'Team').slice(0,20),uniquePicks:!!p.unique_picks,picksEach:Math.max(1,+p.picks_each||1),winningPick:String(p.winning_pick||'')});
+const norm=p=>({...p,buy_in:+p.buy_in,splits:(p.splits&&p.splits.length?p.splits:[100]).map(Number),max_players:p.max_players||0,low_wins:!!p.low_wins,picks:cleanPicks(p.picks),pickLabel:String(p.pick_label||'Team').slice(0,20),uniquePicks:!!p.unique_picks,picksEach:Math.max(1,+p.picks_each||1),winningPick:String(p.winning_pick||''),sport:SPORT_NAME[p.sport]!==undefined?String(p.sport):'custom'});
 function payouts(){const pot=pool.buy_in*entries.length;let left=Math.round(pot*100);return pool.splits.map((pct,i)=>{const c=i===pool.splits.length-1?left:Math.round(pot*pct);left-=c;return {pct,amt:c/100};});}
 
 async function loadPool(quiet){
@@ -441,10 +492,13 @@ function homeView(){
     f.append(el('p',{class:'note',text:'Joining someone else\'s pool? Open the link they sent you. You don\'t need an account.'}));
     return f;
   }
-  const head=el('div',{class:'foot'},[el('h3',{text:'Your pools',style:'margin:0;font-family:var(--display);font-size:22px;text-transform:uppercase'}),el('button',{class:'primary',text:'New pool',onclick:()=>{mode='form';render();}})]);
+  const word=sportWord(curSport),list=mine.filter(p=>p.sport===curSport);
+  f.append(el('nav',{class:'tabs sports','aria-label':'Sports'},SPORT_TABS.map(([k,v])=>{const c=mine.filter(p=>p.sport===k).length;
+    return el('button',{class:'tab','aria-pressed':String(k===curSport),onclick:()=>{curSport=k;store.set('pool-sport',k);render();}},[v,c?el('span',{class:'ct',text:String(c)}):null]);})));
+  const head=el('div',{class:'foot'},[el('h3',{text:(curSport==='custom'?'Other':TAB_NAME[curSport])+' pools',style:'margin:0;font-family:var(--display);font-size:22px;text-transform:uppercase'}),el('button',{class:'primary',text:'New '+word+' pool',onclick:()=>{mode='form';render();}})]);
   const kids=[head];
-  if(!mine.length)kids.push(el('div',{class:'note',text:'No pools yet. Start one, then share its link with your group.'}));
-  else kids.push(el('ul',{class:'mine'},mine.map(p=>el('li',{},[el('a',{href:'?pool='+p.id},[el('span',{text:p.name+' · '+p.count+' in'}),el('span',{text:fmt(p.buy_in*p.count)})])]))));
+  if(!list.length)kids.push(el('div',{class:'note',text:'No '+word+' pools yet. Start one, then share its link with your group.'}));
+  else kids.push(el('ul',{class:'mine'},list.map(p=>el('li',{},[el('a',{href:'?pool='+p.id},[el('span',{text:p.name+' · '+p.count+' in'}),el('span',{text:fmt(p.buy_in*p.count)})])]))));
   f.append(el('section',{class:'block'},kids));
   return f;
 }
@@ -468,7 +522,7 @@ function poolView(){
   const full=pool.max_players&&n>=pool.max_players;
   const myEntry=entries.find(x=>x.id===store.get('bp-joined-'+pool.id));
   const f=document.createDocumentFragment();
-  const chips=el('div',{class:'chips'},[el('span',{class:'chip',text:n+(pool.max_players?' of '+pool.max_players:'')+' in'}),pool.low_wins?el('span',{class:'chip',text:'Low score wins'}):null,full?el('span',{class:'chip gold',text:'Full'}):null,n&&paid===n?el('span',{class:'chip ok',text:'All paid'}):null]);
+  const chips=el('div',{class:'chips'},[SPORT_NAME[pool.sport]?el('span',{class:'chip gold',text:SPORT_NAME[pool.sport]}):null,el('span',{class:'chip',text:n+(pool.max_players?' of '+pool.max_players:'')+' in'}),pool.low_wins?el('span',{class:'chip',text:'Low score wins'}):null,full?el('span',{class:'chip gold',text:'Full'}):null,n&&paid===n?el('span',{class:'chip ok',text:'All paid'}):null]);
   f.append(el('div',{class:'slip'},[
     el('div',{class:'slip-head'},[el('h2',{text:pool.name}),chips]),
     el('div',{class:'hero'},[
@@ -545,25 +599,27 @@ function formView(p){
   const f=el('form',{class:'grid','aria-label':p?'Edit pool':'New pool'});
   const curK=p?p.splits.join('-'):'100';
   f.append(
-    el('label',{class:'full'},['Pool name',el('input',{id:'fName',required:true,maxlength:'60',placeholder:'Sunday Night Football pool',value:p?p.name:''})]),
+    el('label',{class:'full'},['Pool name',el('input',{id:'fName',required:true,maxlength:'60',placeholder:({nfl:'Sunday Night Football pool',nba:'NBA Finals pool',mlb:'World Series pool',nhl:'Stanley Cup pool',golf:'Masters pool',tennis:'Wimbledon pool'})[p?p.sport:curSport]||'Office pool',value:p?p.name:''})]),
     el('label',{},['Buy-in to join ($)',el('input',{id:'fBuy',type:'number',inputmode:'decimal',min:'1',step:'0.01',required:true,placeholder:'20',value:p?String(p.buy_in):''})]),
     el('label',{},['Max players (optional)',el('input',{id:'fMax',type:'number',inputmode:'numeric',min:'2',step:'1',placeholder:'No limit',value:p&&p.max_players?String(p.max_players):''})]),
     ...pickFields(p),
-    el('label',{class:'full'},['Who wins',el('select',{id:'fLow'},[el('option',{value:'0',text:'Highest score wins',selected:!(p&&p.low_wins)}),el('option',{value:'1',text:'Lowest score wins (like golf)',selected:!!(p&&p.low_wins)})])]),
+    el('label',{class:'full'},['Who wins',el('select',{id:'fLow'},[el('option',{value:'0',text:'Highest score wins',selected:!(p?p.low_wins:curSport==='golf')}),el('option',{value:'1',text:'Lowest score wins (like golf)',selected:!!(p?p.low_wins:curSport==='golf')})])]),
     el('label',{class:'full'},['How the pot pays out',el('select',{id:'fSplit'},PRESETS.map(x=>el('option',{value:x.k,text:x.label,selected:x.k===curK})))]),
     el('label',{class:'full'},['Where to send money (optional)',el('input',{id:'fPay',maxlength:'80',placeholder:'Venmo @yourname or Cash App $yourname',value:p&&p.pay_info?p.pay_info:''})]),
     el('div',{class:'formacts'},[el('button',{type:'button',class:'ghost',text:'Cancel',onclick:()=>{mode='view';render();}}),el('button',{type:'submit',class:'primary',text:p?'Save changes':'Create pool'})]));
   f.addEventListener('submit',async e=>{e.preventDefault();
-    const row={name:$('fName').value.trim(),buy_in:Math.round(parseFloat($('fBuy').value)*100)/100,max_players:parseInt($('fMax').value,10)||null,splits:PRESETS.find(x=>x.k===$('fSplit').value).s,pay_info:$('fPay').value.trim()||null,low_wins:$('fLow').value==='1'};const pk=readPickFields();if(pk.error){status(pk.error,true);return;}row.picks=pk.picks;row.pick_label=pk.label;row.unique_picks=pk.unique;row.picks_each=pk.each;if(p&&!pk.picks.includes(p.winningPick))row.winning_pick=null;
+    const row={name:$('fName').value.trim(),buy_in:Math.round(parseFloat($('fBuy').value)*100)/100,max_players:parseInt($('fMax').value,10)||null,splits:PRESETS.find(x=>x.k===$('fSplit').value).s,pay_info:$('fPay').value.trim()||null,low_wins:$('fLow').value==='1'};const pk=readPickFields();if(pk.error){status(pk.error,true);return;}row.picks=pk.picks;row.pick_label=pk.label;row.unique_picks=pk.unique;row.picks_each=pk.each;row.sport=pk.sport;if(p&&!pk.picks.includes(p.winningPick))row.winning_pick=null;
     if(!row.name||!(row.buy_in>0)){status('Give the pool a name and a buy-in above $0.',true);return;}
     status('Saving…');
-    if(p){const r=await SB.from('bp_pools').update(row).eq('id',p.id);if(r.error){status(friendly(r.error),true);return;}
+    // If the sport column hasn't been added in Supabase yet, save without it instead of failing.
+    const noSport=r=>r.error&&/sport/i.test(r.error.message||'')&&'sport' in row?(delete row.sport,status('Saved. To keep pools sorted by sport, run sports-setup.sql in Supabase.'),true):false;
+    if(p){let r=await SB.from('bp_pools').update(row).eq('id',p.id);if(noSport(r))r=await SB.from('bp_pools').update(row).eq('id',p.id);if(r.error){status(friendly(r.error),true);return;}
       const drop=entries.filter(x=>x.place>row.splits.length);for(const x of drop)await SB.from('bp_entries').update({place:0}).eq('id',x.id);
       mode='view';await loadPool();}
-    else{const r=await SB.from('bp_pools').insert({...row,organizer_id:me.id}).select().single();if(r.error){status(friendly(r.error),true);return;}location.href='?pool='+r.data.id;}
+    else{let r=await SB.from('bp_pools').insert({...row,organizer_id:me.id}).select().single();if(noSport(r))r=await SB.from('bp_pools').insert({...row,organizer_id:me.id}).select().single();if(r.error){status(friendly(r.error),true);return;}location.href='?pool='+r.data.id;}
   });
   setTimeout(()=>{const i=$('fName');if(i)i.focus();},0);
-  return el('div',{class:'slip',style:'padding:18px'},[el('h2',{text:p?'Edit pool':'New pool',style:'font-family:var(--display);font-weight:800;font-size:26px;margin:0 0 14px;text-transform:uppercase'}),f]);
+  return el('div',{class:'slip',style:'padding:18px'},[el('h2',{text:(p?'Edit ':'New ')+sportWord(p?p.sport:curSport)+' pool',style:'font-family:var(--display);font-weight:800;font-size:26px;margin:0 0 14px;text-transform:uppercase'}),f]);
 }
 
 $('outBtn').addEventListener('click',async()=>{await SB.auth.signOut();});

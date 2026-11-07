@@ -5,7 +5,7 @@ Betting pools with friends: buy-ins, who's in, the pot, payouts and a live game 
 ## Setup (once)
 
 1. In Supabase, open **SQL Editor → New query**, paste `pool-setup.sql`, and run it.
-2. Do the same with `chat-setup.sql` to turn on the game chat.
+2. Do the same with `chat-setup.sql` (game chat) and `sports-setup.sql` (sport tabs).
 3. In GitHub, go to **Settings → Pages**, set the source to **Deploy from a branch**, branch **main**, folder **/ (root)**, and save.
 
 ## Getting the app
@@ -18,4 +18,4 @@ Betting pools with friends: buy-ins, who's in, the pot, payouts and a live game 
 - `index.html` – the app
 - `config.js` – Supabase connection (publishable key only)
 - `manifest.webmanifest`, `sw.js`, `icons/` – what makes it installable
-- `pool-setup.sql`, `chat-setup.sql` – database setup
+- `pool-setup.sql`, `chat-setup.sql`, `sports-setup.sql` – database setup
