@@ -71,3 +71,27 @@ end $$;
 drop trigger if exists bp_entries_full on public.bp_entries;
 create trigger bp_entries_full before insert on public.bp_entries
   for each row execute function public.bp_check_full();
+
+-- ===== One-tap payouts (added later; safe to run on its own) =====
+alter table public.bp_entries add column if not exists pay_app    text check (pay_app is null or pay_app in ('venmo','cashapp'));
+alter table public.bp_entries add column if not exists pay_handle text check (pay_handle is null or pay_handle ~ '^[A-Za-z0-9_-]{1,30}$');
+alter table public.bp_entries add column if not exists paid_out   boolean not null default false;
+
+-- Joiners can't mark themselves paid out.
+drop policy if exists "bp entries join" on public.bp_entries;
+create policy "bp entries join" on public.bp_entries for insert to anon, authenticated
+  with check (paid = false and place = 0 and paid_out = false);
+
+-- Payment usernames are hidden from the public; only the pool's organizer can read them.
+revoke select on public.bp_entries from anon, authenticated;
+grant select (id, pool_id, name, paid, place, paid_out, created_at) on public.bp_entries to anon, authenticated;
+
+create or replace function public.bp_pay_handles(pid uuid)
+returns table (id uuid, pay_app text, pay_handle text)
+language sql stable security definer set search_path = public as $$
+  select e.id, e.pay_app, e.pay_handle from bp_entries e
+  join bp_pools p on p.id = e.pool_id
+  where e.pool_id = pid and p.organizer_id = auth.uid();
+$$;
+revoke all on function public.bp_pay_handles(uuid) from public, anon;
+grant execute on function public.bp_pay_handles(uuid) to authenticated;
