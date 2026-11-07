@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pool Board</title>
+<meta name="theme-color" content="#17784a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one column "pool slip" — pool tabs on top, the two numbers people ask about (pot + buy-in) as the hero, then payouts, then the roster. */
+:root{
+  --bg:#eef2ec; --surface:#ffffff; --surface2:#f6f8f4; --ink:#14211a; --muted:#5b6a61; --line:#d9e0d8;
+  --money:#17784a; --money-soft:#e2f2e8; --gold:#b97a08; --gold-soft:#fbf0d9; --warn:#b3412c; --warn-soft:#f9e5e0; --on-money:#ffffff;
+  --display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1511; --surface:#16201a; --surface2:#1b2720; --ink:#edf2ec; --muted:#98a89e; --line:#28362d;
+  --money:#46c784; --money-soft:#173426; --gold:#f2b33d; --gold-soft:#33290f; --warn:#f08a74; --warn-soft:#3a1d17; --on-money:#06140c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1511; --surface:#16201a; --surface2:#1b2720; --ink:#edf2ec; --muted:#98a89e; --line:#28362d;
+  --money:#46c784; --money-soft:#173426; --gold:#f2b33d; --gold-soft:#33290f; --warn:#f08a74; --warn-soft:#3a1d17; --on-money:#06140c; color-scheme:dark}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--bg)}
+body{margin:0}
+[hidden]{display:none!important}
+a{color:var(--money)}
+.auth{display:flex;flex-direction:column;gap:10px}
+.auth .row2{display:flex;gap:8px;flex-wrap:wrap}
+.linkbox{display:flex;gap:8px;align-items:center}
+.linkbox input{font-size:14px}
+.linkbox button{flex:none;white-space:nowrap}
+.mine{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.mine li{border-top:1px solid var(--line)}
+.mine li:first-child{border-top:0}
+.mine a{display:flex;justify-content:space-between;gap:12px;padding:12px 0;color:var(--ink);text-decoration:none;font-weight:600}
+.mine a span:last-child{color:var(--money);font-variant-numeric:tabular-nums}
+.you{padding:10px 12px;border-radius:10px;background:var(--money-soft);color:var(--money);font-weight:600}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:640px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+h1{font-family:var(--display);font-weight:800;font-size:34px;letter-spacing:.01em;line-height:1;margin:0;text-transform:uppercase}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sub{color:var(--muted);margin:4px 0 0;font-size:14px}
+.tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.tab{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 14px;font:600 14px var(--body);cursor:pointer;white-space:nowrap}
+.tab[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button{font:600 15px var(--body);cursor:pointer;border-radius:10px;border:1px solid transparent;padding:10px 16px;touch-action:manipulation}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--money);outline-offset:2px}
+.primary{background:var(--money);color:var(--on-money)}
+.ghost{background:transparent;border-color:var(--line);color:var(--ink)}
+.danger{background:var(--warn-soft);color:var(--warn)}
+.slip{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.slip-head{padding:16px 18px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.slip-head h2{font-family:var(--display);font-weight:800;font-size:28px;line-height:1.05;margin:0;text-transform:uppercase;text-wrap:balance;min-width:0}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 8px;border-radius:6px;background:var(--surface2);color:var(--muted)}
+.chip.ok{background:var(--money-soft);color:var(--money)}
+.chip.gold{background:var(--gold-soft);color:var(--gold)}
+.hero{display:grid;grid-template-columns:1.3fr 1fr;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line)}
+.hero>div{padding:14px 18px;min-width:0}
+.hero>div+div{border-left:1px dashed var(--line)}
+.lbl{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.big{font-family:var(--display);font-weight:800;font-size:clamp(40px,12vw,58px);line-height:1;font-variant-numeric:tabular-nums;margin-top:4px}
+.big.pot{color:var(--money)}
+.note{font-size:13px;color:var(--muted);margin-top:4px}
+.meter{padding:14px 18px;display:flex;flex-direction:column;gap:8px}
+.bar{height:10px;border-radius:99px;background:var(--surface2);overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;background:var(--money);border-radius:99px;transition:width .3s}
+.meter .row{display:flex;justify-content:space-between;gap:8px;font-size:14px;font-variant-numeric:tabular-nums}
+.meter .row b{font-weight:700}
+.payinfo{margin:0 18px 14px;padding:10px 12px;border-radius:10px;background:var(--gold-soft);display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.payinfo span{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.payinfo button{padding:6px 12px;font-size:13px;background:var(--surface);border-color:var(--line);color:var(--ink)}
+section.block{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+section.block h3{margin:0;font-family:var(--display);font-weight:700;font-size:22px;text-transform:uppercase;letter-spacing:.02em}
+.places{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.place{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface2)}
+.place .amt{font-family:var(--display);font-weight:800;font-size:30px;line-height:1.05;font-variant-numeric:tabular-nums;color:var(--gold)}
+.place .who{font-size:13px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+ul.roster{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.roster li{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.roster li:first-child{border-top:0}
+.num{font-variant-numeric:tabular-nums;color:var(--muted);font-weight:600;text-align:right}
+.pname{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.pname small{display:block;font-weight:500;color:var(--muted);font-size:12px}
+.acts{display:flex;gap:6px;align-items:center}
+.paid{white-space:nowrap;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--surface2);color:var(--muted)}
+.paid.on{background:var(--money-soft);color:var(--money);border-color:transparent}
+.acts select{font:600 13px var(--body);padding:6px 4px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.x{padding:6px 9px;font-size:13px;background:transparent;border-color:var(--line);color:var(--muted)}
+.add{display:flex;gap:8px}
+input,select{font:500 16px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0;width:100%}
+.add input{flex:1}
+.add button{flex:none}
+form.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+form.grid label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}
+form.grid .full{grid-column:1/-1}
+.formacts{grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.empty{padding:28px 18px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:6px;align-items:center}
+.empty strong{color:var(--ink);font-size:17px}
+.status{font-size:13px;color:var(--muted);min-height:18px}
+.status.err{color:var(--warn)}
+.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px}
+.foot{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center}
+@media (max-width:359px){.hero{grid-template-columns:1fr}.hero>div+div{border-left:0;border-top:1px dashed var(--line)}form.grid{grid-template-columns:1fr}}
+#main{display:flex;flex-direction:column;gap:16px}
+@media (max-width:420px){form.grid{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1 id="siteName"><a href="./" style="color:inherit;text-decoration:none">Pool Board</a></h1>
+      <p class="sub" id="who">Buy-ins, who's in, and what the pot pays out.</p>
+    </div>
+    <button class="ghost" id="outBtn" hidden>Log out</button>
+  </div>
+  <div id="main"><div class="empty"><strong>Loading…</strong></div></div>
+  <div class="status" id="status" role="status"></div>
+</div>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const CFG=window.POOL_CONFIG||{};
+const SB=(CFG.SUPABASE_URL&&CFG.SUPABASE_ANON_KEY&&window.supabase)?window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY):null;
+if(CFG.SITE_NAME){document.title=CFG.SITE_NAME;$('siteName').firstChild.textContent=CFG.SITE_NAME;}
+const PRESETS=[{k:'100',label:'Winner takes all',s:[100]},{k:'70-30',label:'Top 2 · 70 / 30',s:[70,30]},{k:'60-30-10',label:'Top 3 · 60 / 30 / 10',s:[60,30,10]},{k:'50-30-20',label:'Top 3 · 50 / 30 / 20',s:[50,30,20]}];
+const ORD=['1st','2nd','3rd'];
+const fmt=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:n%1?2:0,maximumFractionDigits:2}).format(n);
+const el=(tag,props={},kids=[])=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(props)){if(k==='text')e.textContent=v;else if(k==='class')e.className=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(k,v===true?'':v);}for(const c of [].concat(kids))if(c)e.append(c);return e;};
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const poolId=new URLSearchParams(location.search).get('pool');
+const poolLink=id=>location.href.split('#')[0].split('?')[0]+'?pool='+id;
+
+let me=null,pool=null,entries=[],mode='view',confirmDel=false,mine=[],timer=null;
+function status(msg,err){const s=$('status');s.textContent=msg||'';s.className='status'+(err?' err':'');}
+const friendly=e=>{const m=(e&&e.message)||'';if(/full/i.test(m))return 'This pool is full.';if(/Invalid login/i.test(m))return 'That email and password don\'t match. Try again.';if(/fetch|network/i.test(m))return 'Can\'t reach the server. Check your connection and try again.';return m||'Something went wrong. Try again.';};
+const isOrg=()=>!!(me&&pool&&pool.organizer_id===me.id);
+const norm=p=>({...p,buy_in:+p.buy_in,splits:(p.splits&&p.splits.length?p.splits:[100]).map(Number),max_players:p.max_players||0});
+function payouts(){const pot=pool.buy_in*entries.length;let left=Math.round(pot*100);return pool.splits.map((pct,i)=>{const c=i===pool.splits.length-1?left:Math.round(pot*pct);left-=c;return {pct,amt:c/100};});}
+
+async function loadPool(quiet){
+  try{
+    const [p,e]=await Promise.all([SB.from('bp_pools').select('*').eq('id',poolId).maybeSingle(),SB.from('bp_entries').select('*').eq('pool_id',poolId).order('created_at')]);
+    if(p.error)throw p.error;if(e.error)throw e.error;
+    pool=p.data?norm(p.data):null;entries=e.data||[];
+    if(mode==='view')render();
+    if(!quiet)status('');
+  }catch(err){status(friendly(err),true);if(!pool)render();}
+}
+async function loadMine(){
+  const {data,error}=await SB.from('bp_pools').select('*, bp_entries(count)').eq('organizer_id',me.id).order('created_at',{ascending:false});
+  if(error){status(friendly(error),true);return;}
+  mine=data.map(x=>({...norm(x),count:(x.bp_entries&&x.bp_entries[0]&&x.bp_entries[0].count)||0}));render();
+}
+async function act(promise,after){status('Saving…');const r=await promise;if(r&&r.error){status(friendly(r.error),true);}else status('');if(after)await after();}
+
+function render(){
+  $('outBtn').hidden=!me;
+  const main=$('main');
+  if(!SB){main.replaceChildren(el('div',{class:'slip'},[el('div',{class:'empty'},[el('strong',{text:'Not connected yet'}),el('span',{text:'Add your Supabase URL and key to config.js.'})])]));return;}
+  if(mode==='form'){main.replaceChildren(formView(poolId?pool:null));return;}
+  if(poolId){
+    if(!pool){main.replaceChildren(el('div',{class:'slip'},[el('div',{class:'empty'},[el('strong',{text:'Pool not found'}),el('span',{text:'The link may be wrong, or the organizer deleted this pool.'}),el('a',{href:'./',text:'Go to Pool Board'})])]));return;}
+    main.replaceChildren(poolView());return;
+  }
+  main.replaceChildren(homeView());
+}
+
+function homeView(){
+  const f=document.createDocumentFragment();
+  if(!me){
+    f.append(el('section',{class:'block'},[el('h3',{text:'Run a pool'}),el('p',{class:'note',style:'margin:0;font-size:15px',text:'Set a buy-in, send the link to your group, and everyone adds their own name. The page shows the total payout and what each place wins.'}),authView()]));
+    f.append(el('p',{class:'note',text:'Joining someone else\'s pool? Open the link they sent you. You don\'t need an account.'}));
+    return f;
+  }
+  const head=el('div',{class:'foot'},[el('h3',{text:'Your pools',style:'margin:0;font-family:var(--display);font-size:22px;text-transform:uppercase'}),el('button',{class:'primary',text:'New pool',onclick:()=>{mode='form';render();}})]);
+  const kids=[head];
+  if(!mine.length)kids.push(el('div',{class:'note',text:'No pools yet. Start one, then share its link with your group.'}));
+  else kids.push(el('ul',{class:'mine'},mine.map(p=>el('li',{},[el('a',{href:'?pool='+p.id},[el('span',{text:p.name+' · '+p.count+' in'}),el('span',{text:fmt(p.buy_in*p.count)})])]))));
+  f.append(el('section',{class:'block'},kids));
+  return f;
+}
+
+function authView(){
+  const em=el('input',{id:'aEmail',type:'email',autocomplete:'email',placeholder:'Email','aria-label':'Email'});
+  const pw=el('input',{id:'aPass',type:'password',autocomplete:'current-password',placeholder:'Password','aria-label':'Password'});
+  const go=async signup=>{const e=em.value.trim(),p=pw.value;if(!e||p.length<6){status('Enter your email and a password of at least 6 characters.',true);return;}
+    status(signup?'Creating your account…':'Logging in…');
+    const r=signup?await SB.auth.signUp({email:e,password:p,options:{emailRedirectTo:location.href.split('#')[0]}}):await SB.auth.signInWithPassword({email:e,password:p});
+    if(r.error){status(friendly(r.error),true);return;}
+    if(signup&&!r.data.session){status('Check your email to confirm your account, then log in here.');return;}
+    status('');};
+  return el('form',{class:'auth',onsubmit:e=>{e.preventDefault();go(false);}},[
+    el('p',{class:'note',style:'margin:0',text:'Organizers log in. You can use the same login as your barbershop or events app.'}),em,pw,
+    el('div',{class:'row2'},[el('button',{class:'primary',type:'submit',text:'Log in'}),el('button',{class:'ghost',type:'button',text:'Create account',onclick:()=>go(true)})])]);
+}
+
+function poolView(){
+  const org=isOrg(),n=entries.length,paid=entries.filter(x=>x.paid).length,pot=pool.buy_in*n,got=pool.buy_in*paid,pays=payouts();
+  const full=pool.max_players&&n>=pool.max_players;
+  const myEntry=entries.find(x=>x.id===store.get('bp-joined-'+pool.id));
+  const f=document.createDocumentFragment();
+  const chips=el('div',{class:'chips'},[el('span',{class:'chip',text:n+(pool.max_players?' of '+pool.max_players:'')+' in'}),full?el('span',{class:'chip gold',text:'Full'}):null,n&&paid===n?el('span',{class:'chip ok',text:'All paid'}):null]);
+  f.append(el('div',{class:'slip'},[
+    el('div',{class:'slip-head'},[el('h2',{text:pool.name}),chips]),
+    el('div',{class:'hero'},[
+      el('div',{},[el('div',{class:'lbl',text:'Total payout'}),el('div',{class:'big pot',text:fmt(pot)}),el('div',{class:'note',text:n?fmt(pool.buy_in)+' × '+n+' player'+(n===1?'':'s'):'Grows with every player who joins'})]),
+      el('div',{},[el('div',{class:'lbl',text:'To join'}),el('div',{class:'big',text:fmt(pool.buy_in)}),el('div',{class:'note',text:'Buy-in per person'})])]),
+    el('div',{class:'meter'},[
+      el('div',{class:'row'},[el('span',{},['Collected ',el('b',{text:fmt(got)})]),el('span',{text:paid+' of '+n+' paid'})]),
+      el('div',{class:'bar',role:'progressbar','aria-valuemin':'0','aria-valuemax':String(n||1),'aria-valuenow':String(paid),'aria-label':'Buy-ins collected'},[el('i',{style:'width:'+(n?Math.round(paid/n*100):0)+'%'})]),
+      n-paid>0?el('div',{class:'row'},[el('span',{text:'Still owed'}),el('b',{text:fmt(pot-got)})]):null]),
+    pool.pay_info?el('div',{class:'payinfo'},[el('span',{text:'Pay to: '+pool.pay_info}),copyBtn(pool.pay_info)]):null]));
+  // join
+  if(!org){
+    if(myEntry)f.append(el('div',{class:'you',text:'You\'re in as '+myEntry.name+'. '+(myEntry.paid?'Your buy-in is marked paid.':'Send your '+fmt(pool.buy_in)+' buy-in'+(pool.pay_info?' to '+pool.pay_info:' to the organizer')+'.')}));
+    else if(full)f.append(el('div',{class:'you',text:'This pool is full.'}));
+    else{
+      const inp=el('input',{id:'joinName',placeholder:'Your name',maxlength:'40',autocomplete:'name','aria-label':'Your name'});
+      const join=async()=>{const v=inp.value.trim();if(!v){status('Type your name to join.',true);return;}
+        status('Joining…');const id=crypto.randomUUID();
+        const r=await SB.from('bp_entries').insert({id,pool_id:pool.id,name:v});
+        if(r.error){status(friendly(r.error),true);return;}
+        store.set('bp-joined-'+pool.id,id);status('');await loadPool();};
+      inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();join();}});
+      f.append(el('section',{class:'block'},[el('h3',{text:'Join this pool'}),el('p',{class:'note',style:'margin:0',text:'Add your name, then send your '+fmt(pool.buy_in)+' buy-in'+(pool.pay_info?' to '+pool.pay_info:' to the organizer')+'. The organizer marks you paid.'}),el('div',{class:'add'},[inp,el('button',{class:'primary',text:'Join for '+fmt(pool.buy_in),onclick:join})])]));
+    }
+  }else{
+    f.append(el('section',{class:'block'},[el('h3',{text:'Invite your group'}),el('p',{class:'note',style:'margin:0',text:'Send this link. Anyone who opens it can add their name.'}),el('div',{class:'linkbox'},[el('input',{id:'shareLink',readonly:true,value:poolLink(pool.id),'aria-label':'Pool link',onfocus:e=>e.target.select()}),copyBtn(poolLink(pool.id),true)])]));
+  }
+  // payouts
+  const placed=i=>entries.filter(x=>x.place===i+1).map(x=>x.name).join(', ');
+  f.append(el('section',{class:'block'},[el('h3',{text:'Payouts'}),el('div',{class:'places'},pays.map((x,i)=>el('div',{class:'place'},[el('div',{class:'lbl',text:ORD[i]+' place · '+x.pct+'%'}),el('div',{class:'amt',text:fmt(x.amt)}),el('div',{class:'who',text:placed(i)?'Winner: '+placed(i):'Not decided yet'})])))]));
+  // roster
+  const list=el('ul',{class:'roster'},entries.map((x,i)=>{
+    const acts=el('div',{class:'acts'});
+    if(org){
+      acts.append(el('button',{class:'paid'+(x.paid?' on':''),'aria-pressed':String(x.paid),text:x.paid?'Paid':'Not paid',onclick:()=>{x.paid=!x.paid;render();act(SB.from('bp_entries').update({paid:x.paid}).eq('id',x.id),loadPool);}}));
+      acts.append(el('select',{'aria-label':'Finish for '+x.name,onchange:e=>{x.place=+e.target.value;render();act(SB.from('bp_entries').update({place:x.place}).eq('id',x.id),loadPool);}},[el('option',{value:'0',text:'—'}),...pool.splits.map((_,j)=>el('option',{value:String(j+1),text:ORD[j],selected:x.place===j+1}))]));
+      acts.append(el('button',{class:'x','aria-label':'Remove '+x.name,text:'✕',onclick:()=>{entries=entries.filter(y=>y.id!==x.id);render();act(SB.from('bp_entries').delete().eq('id',x.id),loadPool);}}));
+    }else acts.append(el('span',{class:'paid'+(x.paid?' on':''),text:x.paid?'Paid':'Not paid'}));
+    const win=x.place&&pays[x.place-1]?ORD[x.place-1]+' · wins '+fmt(pays[x.place-1].amt):null;
+    return el('li',{},[el('span',{class:'num',text:String(i+1)}),el('span',{class:'pname'},[x.name,win?el('small',{text:win}):null]),acts]);
+  }));
+  const kids=[el('h3',{text:'Who\'s in'})];
+  kids.push(n?list:el('div',{class:'note',text:'Nobody yet. Be the first to join.'}));
+  if(org){
+    const inp=el('input',{id:'addName',placeholder:full?'Pool is full':'Add someone by name',maxlength:'40',autocomplete:'off',disabled:full,'aria-label':'Player name'});
+    const add=()=>{const v=inp.value.trim();if(!v)return;act(SB.from('bp_entries').insert({pool_id:pool.id,name:v}),async()=>{await loadPool();const i=$('addName');if(i)i.focus();});};
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();add();}});
+    kids.push(el('div',{class:'add'},[inp,el('button',{class:'primary',text:'Add',disabled:full,onclick:add})]));
+  }
+  f.append(el('section',{class:'block'},kids));
+  if(org){
+    f.append(el('div',{class:'foot'},[
+      el('button',{class:'ghost',text:'Edit pool',onclick:()=>{mode='form';render();}}),
+      confirmDel?el('div',{class:'confirm'},[el('span',{text:'Delete this pool for everyone?'}),el('button',{class:'danger',text:'Delete',onclick:async()=>{const r=await SB.from('bp_pools').delete().eq('id',pool.id);if(r.error){status(friendly(r.error),true);return;}location.href='./';}}),el('button',{class:'ghost',text:'Keep',onclick:()=>{confirmDel=false;render();}})])
+      :el('button',{class:'danger',text:'Delete pool',onclick:()=>{confirmDel=true;render();}})]));
+  }else if(!me){
+    f.append(el('p',{class:'note',text:'Running this pool? '},[]));
+    f.lastChild.append(el('a',{href:'#',text:'Organizer log in',onclick:e=>{e.preventDefault();mode='login';$('main').replaceChildren(el('section',{class:'block'},[el('h3',{text:'Organizer log in'}),authView()]));}}));
+  }
+  return f;
+}
+function copyBtn(text,isLink){return el('button',{class:isLink?'ghost':'',text:isLink?'Copy link':'Copy',onclick:e=>{const b=e.currentTarget,lbl=b.textContent;const done=()=>{b.textContent='Copied';setTimeout(()=>b.textContent=lbl,1500);};
+  if(isLink&&navigator.share){navigator.share({title:pool.name,text:'Join '+pool.name+' — '+fmt(pool.buy_in)+' to get in',url:text}).catch(()=>{});return;}
+  if(navigator.clipboard)navigator.clipboard.writeText(text).then(done).catch(()=>{const i=$('shareLink');if(i)i.select();});}});}
+
+function formView(p){
+  const f=el('form',{class:'grid','aria-label':p?'Edit pool':'New pool'});
+  const curK=p?p.splits.join('-'):'100';
+  f.append(
+    el('label',{class:'full'},['Pool name',el('input',{id:'fName',required:true,maxlength:'60',placeholder:'Sunday Night Football pool',value:p?p.name:''})]),
+    el('label',{},['Buy-in to join ($)',el('input',{id:'fBuy',type:'number',inputmode:'decimal',min:'1',step:'0.01',required:true,placeholder:'20',value:p?String(p.buy_in):''})]),
+    el('label',{},['Max players (optional)',el('input',{id:'fMax',type:'number',inputmode:'numeric',min:'2',step:'1',placeholder:'No limit',value:p&&p.max_players?String(p.max_players):''})]),
+    el('label',{class:'full'},['How the pot pays out',el('select',{id:'fSplit'},PRESETS.map(x=>el('option',{value:x.k,text:x.label,selected:x.k===curK})))]),
+    el('label',{class:'full'},['Where to send money (optional)',el('input',{id:'fPay',maxlength:'80',placeholder:'Venmo @yourname or Cash App $yourname',value:p&&p.pay_info?p.pay_info:''})]),
+    el('div',{class:'formacts'},[el('button',{type:'button',class:'ghost',text:'Cancel',onclick:()=>{mode='view';render();}}),el('button',{type:'submit',class:'primary',text:p?'Save changes':'Create pool'})]));
+  f.addEventListener('submit',async e=>{e.preventDefault();
+    const row={name:$('fName').value.trim(),buy_in:Math.round(parseFloat($('fBuy').value)*100)/100,max_players:parseInt($('fMax').value,10)||null,splits:PRESETS.find(x=>x.k===$('fSplit').value).s,pay_info:$('fPay').value.trim()||null};
+    if(!row.name||!(row.buy_in>0)){status('Give the pool a name and a buy-in above $0.',true);return;}
+    status('Saving…');
+    if(p){const r=await SB.from('bp_pools').update(row).eq('id',p.id);if(r.error){status(friendly(r.error),true);return;}
+      const drop=entries.filter(x=>x.place>row.splits.length);for(const x of drop)await SB.from('bp_entries').update({place:0}).eq('id',x.id);
+      mode='view';await loadPool();}
+    else{const r=await SB.from('bp_pools').insert({...row,organizer_id:me.id}).select().single();if(r.error){status(friendly(r.error),true);return;}location.href='?pool='+r.data.id;}
+  });
+  setTimeout(()=>{const i=$('fName');if(i)i.focus();},0);
+  return el('div',{class:'slip',style:'padding:18px'},[el('h2',{text:p?'Edit pool':'New pool',style:'font-family:var(--display);font-weight:800;font-size:26px;margin:0 0 14px;text-transform:uppercase'}),f]);
+}
+
+$('outBtn').addEventListener('click',async()=>{await SB.auth.signOut();});
+
+async function start(){
+  if(!SB){render();return;}
+  const {data}=await SB.auth.getSession();me=data.session?data.session.user:null;
+  SB.auth.onAuthStateChange((ev,s)=>{const was=me&&me.id;me=s?s.user:null;if((me&&me.id)!==was){mode='view';if(poolId)render();else if(me)loadMine();else render();}});
+  if(poolId){await loadPool();
+    // keep the pot live while the page is open
+    timer=setInterval(()=>{if(document.visibilityState==='visible'&&mode==='view')loadPool(true);},10000);
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadPool(true);});
+  }else if(me)await loadMine();else render();
+  $('who').textContent=poolId?'Live pool. Refreshes every few seconds.':'Buy-ins, who\'s in, and what the pot pays out.';
+}
+start();
+})();
+</script>
+</body>
+</html>
