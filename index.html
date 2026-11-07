@@ -158,6 +158,16 @@ form.grid label.chk{flex-direction:row;align-items:center;gap:8px;align-self:end
 form.grid label.chk input{width:20px;height:20px;flex:none;accent-color:var(--money)}
 .add{flex-wrap:wrap}
 .add input{flex:1 1 160px}
+.chooserwrap{display:flex;flex-direction:column;gap:6px;width:100%}
+.chooser{display:flex;flex-wrap:wrap;gap:6px}
+.opt{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 12px;font-size:14px;font-weight:600}
+.opt[aria-pressed="true"]{background:var(--money);color:var(--on-money);border-color:var(--money)}
+.opt:disabled{opacity:.45;cursor:not-allowed}
+.pkedit{display:block}
+.pkpanel{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.pkpanel .primary{align-self:flex-start}
+.namebox{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:420px){.namebox{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
 </style>
 </head>
@@ -186,7 +196,7 @@ const ORD=['1st','2nd','3rd'];
 const fmt=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:n%1?2:0,maximumFractionDigits:2}).format(n);
 const el=(tag,props={},kids=[])=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(props)){if(k==='text')e.textContent=v;else if(k==='class')e.className=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(k,v===true?'':v);}for(const c of [].concat(kids))if(c)e.append(c);return e;};
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
-const COLS='id,pool_id,name,paid,place,paid_out,score,pick,agreed_at,created_at';
+const COLS='id,pool_id,name,paid,place,paid_out,score,pick,chosen,agreed_at,created_at';
 const APPS={venmo:{label:'Venmo',pre:'@'},cashapp:{label:'Cash App',pre:'$'}};
 const cleanHandle=h=>String(h||'').trim().replace(/^[@$]+/,'').replace(/\s+/g,'');
 const okHandle=h=>/^[A-Za-z0-9_-]{1,30}$/.test(h);
@@ -225,7 +235,7 @@ function rosterList(list,pays,org,splits,auto,h,low,pk){
     const tied=pl?list.filter(y=>y.place===pl).length:1;
     const win=pl?ORD[pl-1]+' place · wins '+fmt(Math.round(pays[pl-1].amt/tied*100)/100):null;
     const badge=pl?el('span',{class:'num medal '+MEDAL[pl-1],title:ORD[pl-1]+' place',text:String(pl)}):el('span',{class:'num',text:String(i+1)});
-    return el('li',{class:pl?'won '+MEDAL[pl-1]:''},[badge,el('span',{class:'pname'},[x.name,pk&&pk.picks.length?(org?(()=>{const s=pickSelect('pk'+x.key,pk,list,x.pick||'','Pick '+pk.label.toLowerCase());s.className='pksel';s.addEventListener('change',e=>h.pick(x,e.target.value));return s;})():el('span',{class:'pk',text:pk.label+': '+(x.pick||'—')})):null,win?el('small',{text:win}):null]),acts]);
+    return el('li',{class:pl?'won '+MEDAL[pl-1]:''},[badge,el('span',{class:'pname'},[x.name,pickCell(x,pk,org,list,h),win?el('small',{text:win}):null]),acts]);
   }));
 }
 // Pool Terms – Promise to Pay. c = {name, buyIn, payTo, splits, low}
@@ -234,7 +244,7 @@ function termsItems(c){
   return [
     ['Buy-in','Each player promises to pay the '+fmt(c.buyIn)+' buy-in to the organizer'+(c.payTo?' ('+c.payTo+')':'')+' before the game starts. A player who hasn\'t paid by then can be removed and can\'t win a prize.'],
     ['The pot','Every buy-in goes into the pot. The organizer keeps no cut: all the money collected is paid out to the winners.'],
-    ['Prizes',split+' Places are set by the scores the organizer posts on this page, and the '+(c.low?'lowest':'highest')+' score wins. '+(c.pickLabel?' If the organizer posts a winning '+c.pickLabel.toLowerCase()+', everyone who picked it shares 1st place instead.':'')+' Players tied for a place split that place\'s prize equally.'],
+    ['Prizes',split+' Places are set by the scores the organizer posts on this page, and the '+(c.low?'lowest':'highest')+' score wins. '+(c.pickLabel?' Each player picks '+nOf(c.each||1,c.pickLabel)+'. If the organizer posts a winning '+c.pickLabel.toLowerCase()+', everyone who picked it shares 1st place instead.':'')+' Players tied for a place split that place\'s prize equally.'],
     ['When victory is confirmed','A win is confirmed once the game is final and the organizer posts the final scores here. Anyone in the pool has 24 hours after that to point out a mistake to the organizer. After 24 hours, the results are final.'],
     ['Promise to pay the winners','Once victory is confirmed, the organizer promises to pay each winner their full prize within 48 hours, to the Venmo or Cash App username the winner gave, and to mark it "Paid out" on this page.'],
     ['If the pool is canceled','If the game is canceled or the pool can\'t be decided, the organizer returns every buy-in in full within 48 hours.'],
@@ -249,18 +259,35 @@ function termsView(c,open){
     el('ol',{},termsItems(c).map(([h,b])=>el('li',{},[el('b',{text:h+'. '}),b])))]);
   return d;
 }
-// Picks: each player chooses a team or player from the organizer's list.
+// Picks: the organizer sets how many teams are in the pool, names them, and sets how many each player must pick.
 const cleanPicks=a=>[...new Set((Array.isArray(a)?a:String(a||'').split('\n')).map(s=>String(s).trim().slice(0,40)).filter(Boolean))].slice(0,64);
-function applyPicks(list,win){list.forEach(x=>{x.place=x.pick&&x.pick===win?1:0;});return true;}
-// k = {picks,label,unique,winning}
-function pickSelect(id,k,list,current,blank){
-  const taken=new Set(k.unique?list.filter(x=>x.pick&&x.pick!==current).map(x=>x.pick):[]);
-  return el('select',{id,'aria-label':k.label},[el('option',{value:'',text:blank}),...k.picks.map(v=>el('option',{value:v,text:v+(taken.has(v)?' (taken)':''),disabled:taken.has(v),selected:v===current}))]);
+const chosenOf=x=>Array.isArray(x.chosen)&&x.chosen.length?x.chosen:(x.pick?[x.pick]:[]);
+const plural=s=>/s$/i.test(s)?s:s+'s';
+const nOf=(n,label)=>n+' '+(n===1?label:plural(label)).toLowerCase();
+function applyPicks(list,win){list.forEach(x=>{x.place=chosenOf(x).includes(win)?1:0;});return true;}
+function takenSet(k,list,exceptKey){return new Set(k.unique?list.filter(x=>x.key!==exceptKey).flatMap(chosenOf):[]);}
+// One-pick pools get a dropdown; multi-pick pools get tap-to-choose buttons limited to k.each.
+function pickChooser(id,k,list,exceptKey,current,blank){
+  const need=k.each||1,taken=takenSet(k,list,exceptKey);
+  if(need===1){const s=el('select',{id,'aria-label':k.label},[el('option',{value:'',text:blank}),...k.picks.map(v=>el('option',{value:v,text:v+(taken.has(v)?' (taken)':''),disabled:taken.has(v),selected:current[0]===v}))]);return {node:s,value:()=>s.value?[s.value]:[]};}
+  const sel=new Set(current.filter(v=>k.picks.includes(v)));
+  const count=el('div',{class:'lbl'}),box=el('div',{class:'chooser',id,role:'group','aria-label':'Choose '+nOf(need,k.label)});
+  const btns=k.picks.map(v=>{const b=el('button',{type:'button',class:'opt',text:v+(taken.has(v)?' (taken)':'')});b.addEventListener('click',()=>{if(sel.has(v))sel.delete(v);else if(sel.size<need)sel.add(v);sync();});box.append(b);return [v,b];});
+  function sync(){btns.forEach(([v,b])=>{b.setAttribute('aria-pressed',String(sel.has(v)));b.disabled=taken.has(v)||(!sel.has(v)&&sel.size>=need);});count.textContent=sel.size+' of '+need+' chosen';}
+  sync();return {node:el('div',{class:'chooserwrap'},[count,box]),value:()=>[...sel]};
+}
+function pickCell(x,k,org,list,h){
+  if(!k||!k.picks.length)return null;const cur=chosenOf(x),lab=(k.each>1?plural(k.label):k.label);
+  if(!org)return el('span',{class:'pk',text:lab+': '+(cur.join(', ')||'—')});
+  if((k.each||1)===1){const c=pickChooser('pk'+x.key,k,list,x.key,cur,'Pick '+k.label.toLowerCase());c.node.className='pksel';c.node.addEventListener('change',()=>h.pick(x,c.value()));return c.node;}
+  const c=pickChooser('pk'+x.key,k,list,x.key,cur,'');
+  const panel=el('div',{class:'pkpanel',hidden:true},[c.node,el('button',{type:'button',class:'primary small',text:'Save',onclick:()=>{const v=c.value();if(v.length!==k.each){status('Choose '+nOf(k.each,k.label)+' for '+x.name+'.',true);return;}status('');h.pick(x,v);}})]);
+  return el('span',{class:'pkedit'},[el('span',{class:'pk',text:(cur.join(', ')||'No '+plural(k.label).toLowerCase()+' yet')+' · '},[el('button',{type:'button',class:'linkish',text:'change',onclick:()=>{panel.hidden=!panel.hidden;}})]),panel]);
 }
 function picksView(list,k,org,setWinner){
-  const by=v=>list.filter(x=>x.pick===v);
-  const kids=[el('h3',{text:k.label+' picks'})];
-  if(org){const s=pickSelect('winPick',k,[],k.winning,'Not decided yet');s.setAttribute('aria-label','Winning '+k.label.toLowerCase());
+  const by=v=>list.filter(x=>chosenOf(x).includes(v));
+  const kids=[el('h3',{text:k.label+' picks'}),el('p',{class:'autonote',text:k.picks.length+' '+plural(k.label).toLowerCase()+' in this pool. Each player picks '+nOf(k.each,k.label)+(k.unique?', and each '+k.label.toLowerCase()+' can only be picked once.':'.')})];
+  if(org){const s=el('select',{id:'winPick','aria-label':'Winning '+k.label.toLowerCase()},[el('option',{value:'',text:'Not decided yet'}),...k.picks.map(v=>el('option',{value:v,text:v,selected:v===k.winning}))]);
     s.addEventListener('change',e=>setWinner(e.target.value));
     kids.push(el('label',{class:'winpick'},[el('span',{class:'lbl',text:'Winning '+k.label.toLowerCase()}),s]),
       el('p',{class:'autonote',text:'Pick the winner and everyone who chose it takes 1st place. Leave it on "Not decided yet" to rank by points instead.'}));}
@@ -269,14 +296,33 @@ function picksView(list,k,org,setWinner){
     return el('div',{class:'pick'+(won?' gold':'')+(k.unique&&ws.length?' gone':'')},[el('div',{class:'pn',text:(won?'🏆 ':'')+v}),el('div',{class:'who',text:ws.length?ws.map(x=>x.name).join(', '):(k.unique?'Open':'No picks yet')})]);})));
   return el('section',{class:'block'},kids);
 }
+// Organizer form: label, how many teams (makes that many name boxes), how many each player picks.
 function pickFields(p){
-  // form fields for the organizer: p has picks, pickLabel, uniquePicks
-  return [
-    el('label',{},['People pick a',el('input',{id:'fPickLabel',maxlength:'20',placeholder:'Team',value:p&&p.pickLabel?p.pickLabel:'Team'})]),
-    el('label',{class:'chk'},[el('input',{type:'checkbox',id:'fUnique',checked:!!(p&&p.uniquePicks)}),'Each choice can only be picked once']),
-    el('label',{class:'full'},['Choices, one per line (optional)',el('textarea',{id:'fPicks',rows:'4',placeholder:'Chiefs\nEagles\nCowboys',text:p&&p.picks?p.picks.join('\n'):''})])];
+  const names=p&&p.picks?p.picks.slice():[];
+  const label=el('input',{id:'fPickLabel',maxlength:'20',placeholder:'Team',value:p&&p.pickLabel?p.pickLabel:'Team'});
+  const count=el('input',{id:'fCount',type:'number',inputmode:'numeric',min:'0',max:'64',step:'1',placeholder:'0 = no picks',value:names.length?String(names.length):''});
+  const each=el('input',{id:'fEach',type:'number',inputmode:'numeric',min:'1',max:'64',step:'1',value:String(p&&p.picksEach||1)});
+  const box=el('div',{class:'full namebox',id:'fNames'});
+  const lc=el('span'),le=el('span'),lu=el('span');
+  function draw(){const L=(label.value.trim()||'Team');lc.textContent='Number of '+plural(L).toLowerCase();le.textContent=plural(L)+' each player must pick';lu.textContent='Each '+L.toLowerCase()+' can only be picked once';
+    const n=Math.max(0,Math.min(64,parseInt(count.value,10)||0));
+    [...box.querySelectorAll('input')].forEach((inp,i)=>{names[i]=inp.value;});
+    box.replaceChildren(...Array.from({length:n},(_,i)=>el('label',{},[L+' '+(i+1),el('input',{class:'fTeam',maxlength:'40',placeholder:L+' name',value:names[i]||''})])));
+    box.hidden=!n;}
+  count.addEventListener('input',draw);label.addEventListener('input',draw);draw();
+  return [el('label',{},['People pick a',label]),el('label',{},[lc,count]),el('label',{},[le,each]),
+    el('label',{class:'chk'},[el('input',{type:'checkbox',id:'fUnique',checked:!!(p&&p.uniquePicks)}),lu]),box];
 }
-function readPickFields(){return {picks:cleanPicks($('fPicks').value),label:($('fPickLabel').value.trim()||'Team').slice(0,20),unique:$('fUnique').checked};}
+function readPickFields(){
+  const label=($('fPickLabel').value.trim()||'Team').slice(0,20);
+  const raw=[...document.querySelectorAll('#fNames .fTeam')].map(i=>i.value.trim());
+  const n=raw.length,picks=cleanPicks(raw),each=Math.max(1,parseInt($('fEach').value,10)||1);
+  let error='';
+  if(n&&raw.some(v=>!v))error='Fill in all '+nOf(n,label)+'.';
+  else if(n&&picks.length<n)error='Each '+label.toLowerCase()+' needs a different name.';
+  else if(n&&each>n)error='Players can\'t pick more '+plural(label).toLowerCase()+' than the pool has.';
+  return {picks,label,unique:$('fUnique').checked,each:n?each:1,error};
+}
 function payoutsView(list,pays,org,poolName,save){
   return el('section',{class:'block'},[el('h3',{text:'Payouts'}),el('div',{class:'places'},pays.map((x,i)=>{
     const ws=list.filter(e=>e.place===i+1),each=ws.length?Math.round(x.amt/ws.length*100)/100:x.amt;
@@ -308,7 +354,7 @@ let me=null,pool=null,entries=[],mode='view',confirmDel=false,mine=[],timer=null
 function status(msg,err){const s=$('status');s.textContent=msg||'';s.className='status'+(err?' err':'');}
 const friendly=e=>{const m=(e&&e.message)||'';if(/full/i.test(m))return 'This pool is full.';if(/taken/i.test(m))return 'Someone already picked that. Choose another.';if(/pick/i.test(m)&&/choose|allowed|valid|policy/i.test(m))return 'Choose one of the listed picks.';if(/row-level security/i.test(m))return 'That didn\'t go through. Check your pick and try again.';if(/Invalid login/i.test(m))return 'That email and password don\'t match. Try again.';if(/fetch|network/i.test(m))return 'Can\'t reach the server. Check your connection and try again.';return m||'Something went wrong. Try again.';};
 const isOrg=()=>!!(me&&pool&&pool.organizer_id===me.id);
-const norm=p=>({...p,buy_in:+p.buy_in,splits:(p.splits&&p.splits.length?p.splits:[100]).map(Number),max_players:p.max_players||0,low_wins:!!p.low_wins,picks:cleanPicks(p.picks),pickLabel:String(p.pick_label||'Team').slice(0,20),uniquePicks:!!p.unique_picks,winningPick:String(p.winning_pick||'')});
+const norm=p=>({...p,buy_in:+p.buy_in,splits:(p.splits&&p.splits.length?p.splits:[100]).map(Number),max_players:p.max_players||0,low_wins:!!p.low_wins,picks:cleanPicks(p.picks),pickLabel:String(p.pick_label||'Team').slice(0,20),uniquePicks:!!p.unique_picks,picksEach:Math.max(1,+p.picks_each||1),winningPick:String(p.winning_pick||'')});
 function payouts(){const pot=pool.buy_in*entries.length;let left=Math.round(pot*100);return pool.splits.map((pct,i)=>{const c=i===pool.splits.length-1?left:Math.round(pot*pct);left-=c;return {pct,amt:c/100};});}
 
 async function loadPool(quiet){
@@ -390,23 +436,24 @@ function poolView(){
     if(myEntry)f.append(el('div',{class:'you',text:'You\'re in as '+myEntry.name+'. '+(myEntry.paid?'Your buy-in is marked paid.':'Send your '+fmt(pool.buy_in)+' buy-in'+(pool.pay_info?' to '+pool.pay_info:' to the organizer')+'.')}));
     else if(full)f.append(el('div',{class:'you',text:'This pool is full.'}));
     else{
+      const jc=pool.picks.length?pickChooser('joinPick',{picks:pool.picks,label:pool.pickLabel,unique:pool.uniquePicks,each:pool.picksEach},entries.map(e=>({...e,key:e.id})),null,[],'Choose your '+pool.pickLabel.toLowerCase()):null;
       const inp=el('input',{id:'joinName',placeholder:'Your name',maxlength:'40',autocomplete:'name','aria-label':'Your name'});
       const join=async()=>{const v=inp.value.trim();if(!v){status('Type your name to join.',true);return;}
-        const jp=$('joinPick')?$('joinPick').value:'';if(pool.picks.length&&!jp){status('Choose your '+pool.pickLabel.toLowerCase()+' to join.',true);$('joinPick').focus();return;}
+        const jp=jc?jc.value():[];if(jc&&jp.length!==pool.picksEach){status('Choose '+nOf(pool.picksEach,pool.pickLabel)+' to join.',true);return;}
         if(!$('agreeTerms').checked){status('Check the box to agree to the pool terms before you join.',true);$('agreeTerms').focus();return;}
         const hd=readHandle('join');if(hd.h&&!okHandle(hd.h)){status('That username has characters Venmo and Cash App don\'t use. Use letters, numbers, - or _.',true);return;}
         status('Joining…');const id=crypto.randomUUID();
-        const r=await SB.from('bp_entries').insert({id,pool_id:pool.id,name:v,pay_app:hd.h?hd.app:null,pay_handle:hd.h||null,pick:jp||null,agreed_at:new Date().toISOString()});
+        const r=await SB.from('bp_entries').insert({id,pool_id:pool.id,name:v,pay_app:hd.h?hd.app:null,pay_handle:hd.h||null,chosen:jp,agreed_at:new Date().toISOString()});
         if(r.error){status(friendly(r.error),true);return;}
         store.set('bp-joined-'+pool.id,id);status('');await loadPool();};
       inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();join();}});
-      f.append(el('section',{class:'block'},[el('h3',{text:'Join this pool'}),el('p',{class:'note',style:'margin:0',text:'Add your name, then send your '+fmt(pool.buy_in)+' buy-in'+(pool.pay_info?' to '+pool.pay_info:' to the organizer')+'. The organizer marks you paid.'}),el('div',{class:'join'},[inp,pool.picks.length?el('div',{class:'lbl',text:'Your '+pool.pickLabel.toLowerCase()}):null,pool.picks.length?pickSelect('joinPick',{picks:pool.picks,label:pool.pickLabel,unique:pool.uniquePicks},entries,'','Choose your '+pool.pickLabel.toLowerCase()):null,el('div',{class:'lbl',text:'If you win, get paid on'}),el('div',{class:'add'},handleFields('join','venmo','')),el('label',{class:'agree'},[el('input',{type:'checkbox',id:'agreeTerms'}),el('span',{},['I agree to the ',el('a',{href:'#terms',text:'pool terms',onclick:e=>{e.preventDefault();const d=$('terms');d.open=true;d.scrollIntoView({behavior:'smooth'});}}),', including paying my '+fmt(pool.buy_in)+' buy-in before the game starts.'])]),el('button',{class:'primary',text:'Join for '+fmt(pool.buy_in),onclick:join})])]));
+      f.append(el('section',{class:'block'},[el('h3',{text:'Join this pool'}),el('p',{class:'note',style:'margin:0',text:'Add your name, then send your '+fmt(pool.buy_in)+' buy-in'+(pool.pay_info?' to '+pool.pay_info:' to the organizer')+'. The organizer marks you paid.'}),el('div',{class:'join'},[inp,jc?el('div',{class:'lbl',text:pool.picksEach>1?'Pick your '+nOf(pool.picksEach,pool.pickLabel):'Your '+pool.pickLabel.toLowerCase()}):null,jc?jc.node:null,el('div',{class:'lbl',text:'If you win, get paid on'}),el('div',{class:'add'},handleFields('join','venmo','')),el('label',{class:'agree'},[el('input',{type:'checkbox',id:'agreeTerms'}),el('span',{},['I agree to the ',el('a',{href:'#terms',text:'pool terms',onclick:e=>{e.preventDefault();const d=$('terms');d.open=true;d.scrollIntoView({behavior:'smooth'});}}),', including paying my '+fmt(pool.buy_in)+' buy-in before the game starts.'])]),el('button',{class:'primary',text:'Join for '+fmt(pool.buy_in),onclick:join})])]));
     }
   }else{
     f.append(el('section',{class:'block'},[el('h3',{text:'Invite your group'}),el('p',{class:'note',style:'margin:0',text:'Send this link. Anyone who opens it can add their name.'}),el('div',{class:'linkbox'},[el('input',{id:'shareLink',readonly:true,value:poolLink(pool.id),'aria-label':'Pool link',onfocus:e=>e.target.select()}),copyBtn(poolLink(pool.id),true)])]));
   }
   // payouts
-  const PK={picks:pool.picks,label:pool.pickLabel,unique:pool.uniquePicks,winning:pool.picks.includes(pool.winningPick)?pool.winningPick:''};
+  const PK={picks:pool.picks,label:pool.pickLabel,unique:pool.uniquePicks,each:pool.picksEach,winning:pool.picks.includes(pool.winningPick)?pool.winningPick:''};
   const auto=PK.winning?applyPicks(entries,PK.winning):applyRanking(entries,pool.splits.length,pool.low_wins);
   if(pool.picks.length)f.append(picksView(entries,PK,org,v=>{pool.winningPick=v;render();act(SB.from('bp_pools').update({winning_pick:v||null}).eq('id',pool.id),loadPool);}));
   f.append(payoutsView(entries,pays,org,pool.name,(w,patch)=>{const row={};if('paidOut'in patch)row.paid_out=patch.paidOut;if('payApp'in patch)row.pay_app=patch.payApp;if('payHandle'in patch)row.pay_handle=patch.payHandle;Object.assign(w,patch);render();act(SB.from('bp_entries').update(row).eq('id',w.id),loadPool);}));
@@ -415,19 +462,22 @@ function poolView(){
     paid:x=>{x.paid=!x.paid;render();act(SB.from('bp_entries').update({paid:x.paid}).eq('id',x.id),loadPool);},
     place:(x,v)=>{x.place=v;render();act(SB.from('bp_entries').update({place:v}).eq('id',x.id),loadPool);},
     score:(x,v)=>{x.score=v;render();act(SB.from('bp_entries').update({score:v}).eq('id',x.id),loadPool);},
-    pick:(x,v)=>{x.pick=v;render();act(SB.from('bp_entries').update({pick:v||null}).eq('id',x.id),loadPool);},
+    pick:(x,v)=>{x.chosen=v;x.pick=null;render();act(SB.from('bp_entries').update({chosen:v,pick:null}).eq('id',x.id),loadPool);},
     remove:x=>{entries=entries.filter(y=>y.id!==x.id);render();act(SB.from('bp_entries').delete().eq('id',x.id),loadPool);}},pool.low_wins,PK);
   const kids=[el('h3',{text:'Who\'s in'})];
   if(org&&n)kids.push(el('p',{class:'autonote',text:'Type each person\'s points. '+(pool.low_wins?'Lowest':'Highest')+' score takes 1st place automatically.'}));
   kids.push(n?list:el('div',{class:'note',text:'Nobody yet. Be the first to join.'}));
   if(org){
     const inp=el('input',{id:'addName',placeholder:full?'Pool is full':'Add someone by name',maxlength:'40',autocomplete:'off',disabled:full,'aria-label':'Player name'});
-    const add=()=>{const v=inp.value.trim();if(!v)return;const pv=$('addPick')?$('addPick').value:'';act(SB.from('bp_entries').insert({pool_id:pool.id,name:v,pick:pv||null}),async()=>{await loadPool();const i=$('addName');if(i)i.focus();});};
+    const ac=pool.picks.length?pickChooser('addPick',PK,entries,null,[],pool.pickLabel+'…'):null;
+    const add=()=>{const v=inp.value.trim();if(!v)return;const ch=ac?ac.value():[];if(ac&&ch.length!==PK.each){status('Choose '+nOf(PK.each,pool.pickLabel)+' for '+v+'.',true);return;}act(SB.from('bp_entries').insert({pool_id:pool.id,name:v,chosen:ch}),async()=>{await loadPool();const i=$('addName');if(i)i.focus();});};
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();add();}});
-    kids.push(el('div',{class:'add'},[inp,pool.picks.length?(()=>{const s=pickSelect('addPick',PK,entries,'',pool.pickLabel+'…');s.style.width='auto';s.style.flex='1 1 auto';return s;})():null,el('button',{class:'primary',text:'Add',disabled:full,onclick:add})]));
+    if(ac&&PK.each===1){ac.node.style.width='auto';ac.node.style.flex='1 1 auto';}
+    if(ac&&PK.each>1)kids.push(ac.node);
+    kids.push(el('div',{class:'add'},[inp,ac&&PK.each===1?ac.node:null,el('button',{class:'primary',text:'Add',disabled:full,onclick:add})]));
   }
   f.append(el('section',{class:'block'},kids));
-  f.append(termsView({name:pool.name,buyIn:pool.buy_in,payTo:pool.pay_info,splits:pool.splits,low:pool.low_wins,pickLabel:pool.picks.length?pool.pickLabel:''}));
+  f.append(termsView({name:pool.name,buyIn:pool.buy_in,payTo:pool.pay_info,splits:pool.splits,low:pool.low_wins,pickLabel:pool.picks.length?pool.pickLabel:'',each:pool.picksEach}));
   if(org){
     f.append(el('div',{class:'foot'},[
       el('button',{class:'ghost',text:'Edit pool',onclick:()=>{mode='form';render();}}),
@@ -456,7 +506,7 @@ function formView(p){
     el('label',{class:'full'},['Where to send money (optional)',el('input',{id:'fPay',maxlength:'80',placeholder:'Venmo @yourname or Cash App $yourname',value:p&&p.pay_info?p.pay_info:''})]),
     el('div',{class:'formacts'},[el('button',{type:'button',class:'ghost',text:'Cancel',onclick:()=>{mode='view';render();}}),el('button',{type:'submit',class:'primary',text:p?'Save changes':'Create pool'})]));
   f.addEventListener('submit',async e=>{e.preventDefault();
-    const row={name:$('fName').value.trim(),buy_in:Math.round(parseFloat($('fBuy').value)*100)/100,max_players:parseInt($('fMax').value,10)||null,splits:PRESETS.find(x=>x.k===$('fSplit').value).s,pay_info:$('fPay').value.trim()||null,low_wins:$('fLow').value==='1'};const pk=readPickFields();row.picks=pk.picks;row.pick_label=pk.label;row.unique_picks=pk.unique;if(p&&!pk.picks.includes(p.winningPick))row.winning_pick=null;
+    const row={name:$('fName').value.trim(),buy_in:Math.round(parseFloat($('fBuy').value)*100)/100,max_players:parseInt($('fMax').value,10)||null,splits:PRESETS.find(x=>x.k===$('fSplit').value).s,pay_info:$('fPay').value.trim()||null,low_wins:$('fLow').value==='1'};const pk=readPickFields();if(pk.error){status(pk.error,true);return;}row.picks=pk.picks;row.pick_label=pk.label;row.unique_picks=pk.unique;row.picks_each=pk.each;if(p&&!pk.picks.includes(p.winningPick))row.winning_pick=null;
     if(!row.name||!(row.buy_in>0)){status('Give the pool a name and a buy-in above $0.',true);return;}
     status('Saving…');
     if(p){const r=await SB.from('bp_pools').update(row).eq('id',p.id);if(r.error){status(friendly(r.error),true);return;}

@@ -141,3 +141,31 @@ end $$;
 drop trigger if exists bp_entries_pick on public.bp_entries;
 create trigger bp_entries_pick before insert or update of pick on public.bp_entries
   for each row execute function public.bp_check_pick();
+
+-- ===== Several picks per player (added later; safe to run on its own) =====
+alter table public.bp_pools   add column if not exists picks_each int not null default 1 check (picks_each between 1 and 64);
+alter table public.bp_entries add column if not exists chosen text[] not null default '{}';
+update public.bp_entries set chosen = array[pick] where pick is not null and cardinality(chosen) = 0;
+grant select (chosen) on public.bp_entries to anon, authenticated;
+
+-- Joiners must choose exactly the number of picks the pool asks for, all from its list.
+drop policy if exists "bp entries join" on public.bp_entries;
+create policy "bp entries join" on public.bp_entries for insert to anon, authenticated
+  with check (paid = false and place = 0 and paid_out = false and score is null and agreed_at is not null and pick is null
+    and exists (select 1 from public.bp_pools p where p.id = pool_id
+                and ((cardinality(p.picks) = 0 and cardinality(chosen) = 0)
+                  or (cardinality(chosen) = p.picks_each and chosen <@ p.picks))));
+
+-- "Each choice can only be picked once" now checks every pick a player makes.
+create or replace function public.bp_check_pick() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if cardinality(coalesce(new.chosen,'{}')) > 0 and exists (select 1 from bp_pools where id = new.pool_id and unique_picks)
+     and exists (select 1 from bp_entries where pool_id = new.pool_id and id <> new.id and chosen && new.chosen) then
+    raise exception 'That pick is already taken';
+  end if;
+  return new;
+end $$;
+drop trigger if exists bp_entries_pick on public.bp_entries;
+create trigger bp_entries_pick before insert or update of chosen on public.bp_entries
+  for each row execute function public.bp_check_pick();
