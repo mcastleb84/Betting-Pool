@@ -112,3 +112,32 @@ drop policy if exists "bp entries join" on public.bp_entries;
 create policy "bp entries join" on public.bp_entries for insert to anon, authenticated
   with check (paid = false and place = 0 and paid_out = false and score is null and agreed_at is not null);
 grant select (agreed_at) on public.bp_entries to anon, authenticated;
+
+-- ===== Team / player picks (added later; safe to run on its own) =====
+alter table public.bp_pools   add column if not exists picks        text[] not null default '{}';
+alter table public.bp_pools   add column if not exists pick_label   text not null default 'Team' check (char_length(pick_label) <= 20);
+alter table public.bp_pools   add column if not exists unique_picks boolean not null default false;
+alter table public.bp_pools   add column if not exists winning_pick text;
+alter table public.bp_entries add column if not exists pick text check (pick is null or char_length(pick) <= 40);
+grant select (pick) on public.bp_entries to anon, authenticated;
+
+-- Joiners must choose one of the pool's listed picks (or none, if the pool has no picks).
+drop policy if exists "bp entries join" on public.bp_entries;
+create policy "bp entries join" on public.bp_entries for insert to anon, authenticated
+  with check (paid = false and place = 0 and paid_out = false and score is null and agreed_at is not null
+    and exists (select 1 from public.bp_pools p where p.id = pool_id
+                and ((cardinality(p.picks) = 0 and pick is null) or pick = any(p.picks))));
+
+-- "Each choice can only be picked once"
+create or replace function public.bp_check_pick() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.pick is not null and exists (select 1 from bp_pools where id = new.pool_id and unique_picks)
+     and exists (select 1 from bp_entries where pool_id = new.pool_id and pick = new.pick and id <> new.id) then
+    raise exception 'That pick is already taken';
+  end if;
+  return new;
+end $$;
+drop trigger if exists bp_entries_pick on public.bp_entries;
+create trigger bp_entries_pick before insert or update of pick on public.bp_entries
+  for each row execute function public.bp_check_pick();
