@@ -178,6 +178,15 @@ form.grid label.chk input{width:20px;height:20px;flex:none;accent-color:var(--mo
 @media (max-width:420px){.namebox{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
 .topacts{display:flex;gap:8px;flex-wrap:wrap}
+.tov{position:fixed;inset:0;z-index:1000;background:transparent}
+.tov.dim{background:rgba(0,0,0,.6)}
+.thl{position:fixed;z-index:1001;border-radius:14px;box-shadow:0 0 0 3px var(--money),0 0 0 9999px rgba(0,0,0,.6);pointer-events:none;transition:top .25s,left .25s,width .25s,height .25s}
+.tcard{position:fixed;z-index:1002;left:50%;width:calc(100% - 32px);max-width:400px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:0 12px 32px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:6px}
+.tcard h2{font-family:var(--display);font-weight:800;font-size:24px;margin:0;text-transform:uppercase;line-height:1.1}
+.tcard p{margin:0;font-size:15px;line-height:1.45}
+.tbtns{display:flex;gap:8px;align-items:center;margin-top:8px}
+.tsp{flex:1}
+@media (prefers-reduced-motion:reduce){.thl{transition:none}}
 .sports{gap:6px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .sports .tab{font:700 15px var(--body);padding:10px 16px;display:inline-flex;gap:7px;align-items:center}
 .tab .ct{font-size:12px;font-weight:700;min-width:20px;padding:1px 6px;border-radius:99px;background:var(--surface2);color:var(--muted);text-align:center}
@@ -228,7 +237,7 @@ body.haschat .wrap{padding-bottom:96px}
       <h1 id="siteName"><a href="./" style="color:inherit;text-decoration:none">Pool Board</a></h1>
       <p class="sub" id="who">Buy-ins, who's in, and what the pot pays out.</p>
     </div>
-    <div class="topacts"><button class="primary" id="installBtn" hidden>Get the app</button><button class="ghost" id="outBtn" hidden>Log out</button></div>
+    <div class="topacts"><button class="ghost" id="tourBtn">How it works</button><button class="primary" id="installBtn" hidden>Get the app</button><button class="ghost" id="outBtn" hidden>Log out</button></div>
   </div>
   <div class="iosinstall" id="iosHelp" hidden role="dialog" aria-labelledby="iosTitle">
     <strong id="iosTitle">Add Pool Board to your home screen</strong>
@@ -323,7 +332,7 @@ function termsView(c,open){
   return d;
 }
 // Picks: the organizer sets how many teams are in the pool, names them, and sets how many each player must pick.
-const cleanPicks=a=>[...new Set((Array.isArray(a)?a:String(a||'').split('\n')).map(s=>String(s).trim().slice(0,40)).filter(Boolean))].slice(0,64);
+const cleanPicks=a=>[...new Set((Array.isArray(a)?a:String(a||'').split('\n')).map(s=>String(s).trim().slice(0,40)).filter(Boolean))].slice(0,200);
 const chosenOf=x=>Array.isArray(x.chosen)&&x.chosen.length?x.chosen:(x.pick?[x.pick]:[]);
 const plural=s=>/s$/i.test(s)?s:s+'s';
 const nOf=(n,label)=>n+' '+(n===1?label:plural(label)).toLowerCase();
@@ -372,6 +381,30 @@ const SPORT_TABS=[['nfl','Football'],['nba','Basketball'],['mlb','Baseball'],['n
 const TAB_NAME=Object.fromEntries(SPORT_TABS);
 const sportWord=k=>k==='custom'?'custom':(TAB_NAME[k]||'custom').toLowerCase();
 let curSport=store.get('pool-sport');if(!TAB_NAME[curSport])curSport='nfl';
+// Live golf and tennis fields from ESPN's public scoreboard. If it can't be reached, the organizer types names instead.
+const TOURS={golf:[['pga','PGA Tour','golf/pga'],['lpga','LPGA','golf/lpga'],['eur','DP World Tour','golf/eur']],tennis:[['atp','ATP (men)','tennis/atp'],['wta','WTA (women)','tennis/wta']]};
+async function loadField(sp,tourKey){
+  const t=(TOURS[sp]||[]).find(x=>x[0]===tourKey);if(!t)throw new Error('tour');
+  const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),10000);
+  let j;try{const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/'+t[2]+'/scoreboard',{signal:ctl.signal});if(!r.ok)throw new Error('http');j=await r.json();}finally{clearTimeout(tm);}
+  const evs=Array.isArray(j&&j.events)?j.events:[];if(!evs.length)return null;
+  const st=e=>e&&e.status&&e.status.type&&e.status.type.state;
+  const ev=evs.find(e=>st(e)==='in')||evs.find(e=>st(e)==='pre')||evs[0];
+  const names=new Set();
+  const walk=(o,depth)=>{if(!o||typeof o!=='object'||depth>8)return;
+    if(Array.isArray(o)){o.forEach(x=>walk(x,depth+1));return;}
+    const a=o.athlete;if(a&&typeof a==='object'){const n=a.displayName||a.fullName||a.shortName;if(n)names.add(String(n).trim().slice(0,40));}
+    for(const k of ['competitions','competitors','groupings']){if(o[k])walk(o[k],depth+1);}};
+  if(sp==='tennis'&&Array.isArray(ev.groupings)){
+    const want=tourKey==='wta'?/women/i:/men/i,dn=g=>String((g.grouping&&g.grouping.displayName)||'');
+    let gs=ev.groupings.filter(g=>/singles/i.test(dn(g))&&want.test(dn(g))&&!(tourKey==='atp'&&/women/i.test(dn(g))));
+    if(!gs.length)gs=ev.groupings.filter(g=>/singles/i.test(dn(g)));
+    walk(gs.length?gs:ev.groupings,0);
+  }else walk(ev,0);
+  const d=x=>{const t=Date.parse(x);return isNaN(t)?'':new Date(t).toLocaleDateString([],{month:'short',day:'numeric'});};
+  const dates=[d(ev.date),d(ev.endDate)].filter(Boolean);
+  return {event:String(ev.name||ev.shortName||'This week').slice(0,80),dates:dates.length===2&&dates[0]!==dates[1]?dates.join(' – '):dates[0]||'',players:[...names].sort((a,b)=>a.split(' ').slice(-1)[0].localeCompare(b.split(' ').slice(-1)[0]))};
+}
 // Organizer form. Pro leagues: check the teams in the pool. Golf, tennis and Other: type each name.
 function pickFields(p){
   const sp=p?(p.sport||'custom'):curSport,lg=LEAGUES[sp],indiv=INDIV[sp];
@@ -395,23 +428,44 @@ function pickFields(p){
         el('div',{class:'tgrid'},cbs.map((cb,i)=>el('label',{class:'tchk'},[cb,el('span',{text:lg.teams[i]})]))),selWrap]));
   }
   function draw(){const L=lg?'Team':(indiv||label.value.trim()||'Team');
-    lc.textContent='Number of '+plural(L).toLowerCase();le.textContent=plural(L)+' each player '+(indiv?'can pick (most)':'must pick');lu.textContent='Each '+L.toLowerCase()+' can only be picked once';
+    lc.textContent='Number of '+plural(L).toLowerCase();le.textContent=plural(L)+' each player must pick';lu.textContent='Each '+L.toLowerCase()+' can only be picked once';
     if(lg)return;
     const n=Math.max(0,Math.min(64,parseInt(count.value,10)||0));
     [...box.querySelectorAll('input')].forEach((inp,i)=>{names[i]=inp.value;});
     box.replaceChildren(...Array.from({length:n},(_,i)=>el('label',{},[L+' '+(i+1),el('input',{class:'fTeam',maxlength:'40',placeholder:L+' name',value:names[i]||''})])));
     box.hidden=!n;}
   count.addEventListener('input',draw);label.addEventListener('input',draw);draw();
-  if(indiv)kids.push(el('p',{class:'sportnote',text:'Type in each '+indiv.toLowerCase()+' in this pool. Players pick from your list.'}));
-  if(!lg){if(!indiv)kids.push(el('label',{},['People pick a',label]));else{label.type='hidden';kids.push(label);}kids.push(el('label',{},[lc,count]));}
+  if(indiv){
+    const tourSel=el('select',{id:'fTour','aria-label':'Tour'},TOURS[sp].map(([k,v])=>el('option',{value:k,text:v,selected:k===((p&&p.tour)||store.get('pool-tour-'+sp))})));
+    const evInp=el('input',{type:'hidden',id:'fEvent',value:p&&p.event||''});
+    const ta=el('textarea',{id:'fField',rows:'8',placeholder:'One '+indiv.toLowerCase()+' per line'});ta.value=p?p.picks.join('\n'):'';
+    const note=el('p',{class:'sportnote',id:'fNote'});
+    const cnt=()=>cleanPicks(ta.value).length;
+    const showNote=(msg)=>{note.replaceChildren(...(msg?[msg]:[evInp.value?el('b',{text:evInp.value}):'',(evInp.value?' · ':'')+cnt()+' '+plural(indiv).toLowerCase()+' in this pool. Edit the list below to add or remove anyone.']));};
+    const btn=el('button',{type:'button',class:'ghost',text:'Load this week\u2019s field'});
+    async function go(auto){btn.disabled=true;showNote('Loading this week\u2019s field\u2026');store.set('pool-tour-'+sp,tourSel.value);
+      try{const f=await loadField(sp,tourSel.value);
+        if(!f||!f.players.length){showNote('No field is posted for this tour yet. Type the '+plural(indiv).toLowerCase()+' in below.');return;}
+        ta.value=f.players.join('\n');evInp.value=f.event;note.replaceChildren(el('b',{text:f.event}),(f.dates?' · '+f.dates:'')+' · '+f.players.length+' '+plural(indiv).toLowerCase()+' loaded. Remove anyone who isn\u2019t in your pool.');}
+      catch(e){showNote('Couldn\u2019t load the field right now. Type the '+plural(indiv).toLowerCase()+' in below, one per line.');}
+      finally{btn.disabled=false;}}
+    btn.addEventListener('click',()=>go(false));ta.addEventListener('input',()=>showNote());
+    kids.push(el('label',{},['Tour',tourSel]),el('div',{class:'teampick'},[btn]),evInp,note,el('label',{class:'full'},[plural(indiv)+' in this pool (one per line)',ta]));
+    if(!p||!p.picks.length)setTimeout(()=>go(true),0);else showNote();
+    label.type='hidden';kids.push(label);
+  }
+  if(!lg&&!indiv){kids.push(el('label',{},['People pick a',label]),el('label',{},[lc,count]));}
   kids.push(el('label',{},[le,each]),el('label',{class:'chk'},[el('input',{type:'checkbox',id:'fUnique',checked:!!(p&&p.uniquePicks)}),lu]));
-  if(!lg)kids.push(box);
+  if(!lg&&!indiv)kids.push(box);
   return kids;
 }
 function readPickFields(){
   const sp=$('fSport').value,lg=LEAGUES[sp],each=Math.max(1,parseInt($('fEach').value,10)||1);
   if(lg){const on=new Set([...document.querySelectorAll('#fTeams .fTeamCb:checked')].map(i=>i.value)),picks=lg.teams.filter(t=>on.has(t));
     return {sport:sp,picks,label:'Team',unique:$('fUnique').checked,each:Math.min(each,Math.max(1,picks.length)),error:!picks.length?'Check at least one team for this pool.':each>picks.length?'Players can’t pick more teams than you checked.':''};}
+  if(INDIV[sp]){const lab=INDIV[sp],picks=cleanPicks($('fField').value);
+    return {sport:sp,tour:$('fTour').value,event:$('fEvent').value.trim().slice(0,80)||null,picks,label:lab,unique:$('fUnique').checked,each:Math.min(each,Math.max(1,picks.length)),
+      error:!picks.length?'Add at least one '+lab.toLowerCase()+', or load this week\u2019s field.':each>picks.length?'Players can\u2019t pick more '+plural(lab).toLowerCase()+' than the pool has.':''};}
   const label=(INDIV[sp]||$('fPickLabel').value.trim()||'Team').slice(0,20);
   const raw=[...document.querySelectorAll('#fNames .fTeam')].map(i=>i.value.trim());
   const n=raw.length,picks=cleanPicks(raw);
@@ -452,10 +506,11 @@ let me=null,pool=null,entries=[],mode='view',confirmDel=false,mine=[],timer=null
 function status(msg,err){const s=$('status');s.textContent=msg||'';s.className='status'+(err?' err':'');}
 const friendly=e=>{const m=(e&&e.message)||'';if(/full/i.test(m))return 'This pool is full.';if(/taken/i.test(m))return 'Someone already picked that. Choose another.';if(/pick/i.test(m)&&/choose|allowed|valid|policy/i.test(m))return 'Choose one of the listed picks.';if(/row-level security/i.test(m))return 'That didn\'t go through. Check your pick and try again.';if(/Invalid login/i.test(m))return 'That email and password don\'t match. Try again.';if(/fetch|network/i.test(m))return 'Can\'t reach the server. Check your connection and try again.';return m||'Something went wrong. Try again.';};
 const isOrg=()=>!!(me&&pool&&pool.organizer_id===me.id);
-const norm=p=>({...p,buy_in:+p.buy_in,splits:(p.splits&&p.splits.length?p.splits:[100]).map(Number),max_players:p.max_players||0,low_wins:!!p.low_wins,picks:cleanPicks(p.picks),pickLabel:String(p.pick_label||'Team').slice(0,20),uniquePicks:!!p.unique_picks,picksEach:Math.max(1,+p.picks_each||1),winningPick:String(p.winning_pick||''),sport:SPORT_NAME[p.sport]!==undefined?String(p.sport):'custom'});
+const norm=p=>({...p,buy_in:+p.buy_in,splits:(p.splits&&p.splits.length?p.splits:[100]).map(Number),max_players:p.max_players||0,low_wins:!!p.low_wins,picks:cleanPicks(p.picks),pickLabel:String(p.pick_label||'Team').slice(0,20),uniquePicks:!!p.unique_picks,picksEach:Math.max(1,+p.picks_each||1),winningPick:String(p.winning_pick||''),sport:SPORT_NAME[p.sport]!==undefined?String(p.sport):'custom',event:String(p.event||''),tour:String(p.tour||'')});
 function payouts(){const pot=pool.buy_in*entries.length;let left=Math.round(pot*100);return pool.splits.map((pct,i)=>{const c=i===pool.splits.length-1?left:Math.round(pot*pct);left-=c;return {pct,amt:c/100};});}
 
 async function loadPool(quiet){
+  if(tourDemo)return;
   try{
     const [p,e]=await Promise.all([SB.from('bp_pools').select('*').eq('id',poolId).maybeSingle(),SB.from('bp_entries').select(COLS).eq('pool_id',poolId).order('created_at')]);
     if(p.error)throw p.error;if(e.error)throw e.error;
@@ -477,7 +532,8 @@ function render(){
   $('outBtn').hidden=!me;
   const main=$('main');
   if(!SB){main.replaceChildren(el('div',{class:'slip'},[el('div',{class:'empty'},[el('strong',{text:'Not connected yet'}),el('span',{text:'Add your Supabase URL and key to config.js.'})])]));return;}
-  if(mode==='form'){main.replaceChildren(formView(poolId?pool:null));return;}
+  if(mode==='form'){main.replaceChildren(formView(poolId&&!tourDemo?pool:null));return;}
+  if(tourDemo){main.replaceChildren(poolView());return;}
   if(poolId){
     if(!pool){main.replaceChildren(el('div',{class:'slip'},[el('div',{class:'empty'},[el('strong',{text:'Pool not found'}),el('span',{text:'The link may be wrong, or the organizer deleted this pool.'}),el('a',{href:'./',text:'Go to Pool Board'})])]));return;}
     main.replaceChildren(poolView());return;
@@ -522,7 +578,7 @@ function poolView(){
   const full=pool.max_players&&n>=pool.max_players;
   const myEntry=entries.find(x=>x.id===store.get('bp-joined-'+pool.id));
   const f=document.createDocumentFragment();
-  const chips=el('div',{class:'chips'},[SPORT_NAME[pool.sport]?el('span',{class:'chip gold',text:SPORT_NAME[pool.sport]}):null,el('span',{class:'chip',text:n+(pool.max_players?' of '+pool.max_players:'')+' in'}),pool.low_wins?el('span',{class:'chip',text:'Low score wins'}):null,full?el('span',{class:'chip gold',text:'Full'}):null,n&&paid===n?el('span',{class:'chip ok',text:'All paid'}):null]);
+  const chips=el('div',{class:'chips'},[SPORT_NAME[pool.sport]?el('span',{class:'chip gold',text:SPORT_NAME[pool.sport]+(pool.event?' · '+pool.event:'')}):null,el('span',{class:'chip',text:n+(pool.max_players?' of '+pool.max_players:'')+' in'}),pool.low_wins?el('span',{class:'chip',text:'Low score wins'}):null,full?el('span',{class:'chip gold',text:'Full'}):null,n&&paid===n?el('span',{class:'chip ok',text:'All paid'}):null]);
   f.append(el('div',{class:'slip'},[
     el('div',{class:'slip-head'},[el('h2',{text:pool.name}),chips]),
     el('div',{class:'hero'},[
@@ -608,11 +664,11 @@ function formView(p){
     el('label',{class:'full'},['Where to send money (optional)',el('input',{id:'fPay',maxlength:'80',placeholder:'Venmo @yourname or Cash App $yourname',value:p&&p.pay_info?p.pay_info:''})]),
     el('div',{class:'formacts'},[el('button',{type:'button',class:'ghost',text:'Cancel',onclick:()=>{mode='view';render();}}),el('button',{type:'submit',class:'primary',text:p?'Save changes':'Create pool'})]));
   f.addEventListener('submit',async e=>{e.preventDefault();
-    const row={name:$('fName').value.trim(),buy_in:Math.round(parseFloat($('fBuy').value)*100)/100,max_players:parseInt($('fMax').value,10)||null,splits:PRESETS.find(x=>x.k===$('fSplit').value).s,pay_info:$('fPay').value.trim()||null,low_wins:$('fLow').value==='1'};const pk=readPickFields();if(pk.error){status(pk.error,true);return;}row.picks=pk.picks;row.pick_label=pk.label;row.unique_picks=pk.unique;row.picks_each=pk.each;row.sport=pk.sport;if(p&&!pk.picks.includes(p.winningPick))row.winning_pick=null;
+    const row={name:$('fName').value.trim(),buy_in:Math.round(parseFloat($('fBuy').value)*100)/100,max_players:parseInt($('fMax').value,10)||null,splits:PRESETS.find(x=>x.k===$('fSplit').value).s,pay_info:$('fPay').value.trim()||null,low_wins:$('fLow').value==='1'};const pk=readPickFields();if(pk.error){status(pk.error,true);return;}row.picks=pk.picks;row.pick_label=pk.label;row.unique_picks=pk.unique;row.picks_each=pk.each;row.sport=pk.sport;if(INDIV[pk.sport]){row.event=pk.event;row.tour=pk.tour;}if(p&&!pk.picks.includes(p.winningPick))row.winning_pick=null;
     if(!row.name||!(row.buy_in>0)){status('Give the pool a name and a buy-in above $0.',true);return;}
     status('Saving…');
     // If the sport column hasn't been added in Supabase yet, save without it instead of failing.
-    const noSport=r=>r.error&&/sport/i.test(r.error.message||'')&&'sport' in row?(delete row.sport,status('Saved. To keep pools sorted by sport, run sports-setup.sql in Supabase.'),true):false;
+    const noSport=r=>r.error&&/sport|event|tour/i.test(r.error.message||'')&&'sport' in row?(delete row.sport,delete row.event,delete row.tour,status('Saved. To keep pools sorted by sport, run sports-setup.sql in Supabase.'),true):false;
     if(p){let r=await SB.from('bp_pools').update(row).eq('id',p.id);if(noSport(r))r=await SB.from('bp_pools').update(row).eq('id',p.id);if(r.error){status(friendly(r.error),true);return;}
       const drop=entries.filter(x=>x.place>row.splits.length);for(const x of drop)await SB.from('bp_entries').update({place:0}).eq('id',x.id);
       mode='view';await loadPool();}
@@ -623,6 +679,76 @@ function formView(p){
 }
 
 $('outBtn').addEventListener('click',async()=>{await SB.auth.signOut();});
+
+
+// ---- Guided tour: walks through a sample pool (never saved) and highlights each part of the page.
+const DEMO={id:'__demo',name:'Sample football pool',buy_in:20,max_players:0,low_wins:false,splits:[70,30],pay_info:'Venmo @organizer',sport:'nfl',event:'',tour:'',
+  picks:['Chicago Bears','Dallas Cowboys','Detroit Lions','Kansas City Chiefs'],pickLabel:'Team',uniquePicks:true,picksEach:1,winningPick:'',created_at:''};
+const DEMO_ENTRIES=[{id:'d1',name:'Alex',paid:true,place:0,paidOut:false,payApp:'venmo',payHandle:'alex-p',score:31,chosen:['Detroit Lions']},
+  {id:'d2',name:'Jordan',paid:true,place:0,paidOut:false,payApp:'venmo',payHandle:'',score:24,chosen:['Kansas City Chiefs']},
+  {id:'d3',name:'Sam',paid:false,place:0,paidOut:false,payApp:'venmo',payHandle:'',score:17,chosen:['Chicago Bears']}];
+let tourDemo=null,tour=null;
+const secBy=t=>[...document.querySelectorAll('#main section.block')].find(x=>{const h=x.querySelector('h3');return h&&h.textContent.toLowerCase().includes(t);});
+const labOf=id=>{const e=$(id);return e?e.closest('label'):null;};
+function setDemo(on){
+  if(on&&!tourDemo){tour.saved={pool,entries,mode,curSport};tourDemo=true;pool={...DEMO,organizer_id:me?me.id:'__nobody'};entries=DEMO_ENTRIES.map(x=>({...x,key:x.id,chosen:x.chosen.slice()}));}
+  if(!on&&tourDemo){const sv=tour.saved;tourDemo=null;pool=sv.pool;entries=sv.entries;curSport=sv.curSport;}
+}
+const toDemo=()=>{setDemo(true);mode='view';render();};
+const toHome=()=>{setDemo(false);mode='view';render();};
+const toForm=()=>{setDemo(false);curSport='nfl';mode='form';render();};
+function tourSteps(){
+  const org=!!me,onHome=!poolId,S=[{t:'Welcome to '+(CFG.SITE_NAME||'Pool Board'),b:'This quick tour walks through a sample football pool so you can see how everything works. Nothing in the tour is saved.',go:toDemo}];
+  if(org&&onHome)S.push(
+    {sel:()=>document.querySelector('.sports'),t:'Pick a sport',b:'Every sport has its own tab. The number on a tab shows how many pools you have in it.',go:toHome},
+    {sel:()=>[...document.querySelectorAll('#main .foot .primary')][0],t:'Start a pool',b:'This button creates a new pool for the sport tab you’re on.',go:toHome},
+    {sel:()=>labOf('fName'),t:'Name it',b:'Give the pool a name, then set the buy-in and an optional player limit just below.',go:toForm},
+    {sel:()=>$('fTeams'),t:'Check the teams',b:'Tick every team that’s in this pool. Players can only pick from the teams you check. Golf and tennis pools load this week’s field instead.',go:toForm},
+    {sel:()=>labOf('fSplit'),t:'How the pot pays out',b:'Winner takes all, or split it between the top 2 or 3.',go:toForm},
+    {sel:()=>labOf('fPay'),t:'Where to send money',b:'Add your Venmo or Cash App so players know where to send their buy-in. Then tap Create pool and share the link.',go:toForm});
+  S.push(
+    {sel:()=>document.querySelector('#main .hero'),t:'The pot',b:'Total payout grows with every player who joins. “To join” is the buy-in per person.',go:toDemo},
+    {sel:()=>document.querySelector('#main .meter'),t:'Who’s paid',b:'The bar shows how much has been collected and what’s still owed.',go:toDemo},
+    {sel:()=>document.querySelector('#main .payinfo'),t:'Pay the organizer',b:'Tap Copy to grab the organizer’s Venmo or Cash App and send your buy-in.',go:toDemo},
+    {sel:()=>secBy('picks'),t:'Team picks',b:'See who picked each team and which are still open. When the organizer sets the winning team, everyone who picked it takes 1st.',go:toDemo},
+    {sel:()=>secBy('who'),t:'Who’s in',b:'Everyone in the pool with their picks, points and whether they’ve paid. The highest score takes 1st automatically.',go:toDemo},
+    {sel:()=>secBy('payouts'),t:'Payouts',b:'What each place wins and who’s in line for it. The organizer pays winners in one tap on Venmo or Cash App.',go:toDemo},
+    {sel:()=>$('terms'),t:'Pool terms',b:'The promise-to-pay rules everyone agrees to by joining. Tap to read them.',go:toDemo},
+    {t:'Game chat and the app',b:'Every pool has a 💬 Game chat button in the corner so everyone can talk during the game. Tap “Get the app” to put Pool Board on your home screen. Replay this tour anytime with “How it works.”',go:toDemo});
+  return S;
+}
+function startTour(){if(tour)return;
+  tour={i:0,steps:null};tour.steps=tourSteps();
+  const ov=el('div',{class:'tov'}),hl=el('div',{class:'thl'}),card=el('div',{class:'tcard',role:'dialog','aria-modal':'true','aria-labelledby':'tTitle'});
+  Object.assign(tour,{ov,hl,card});document.body.append(ov,hl,card);
+  tour.onkey=e=>{if(e.key==='Escape')endTour();else if(e.key==='ArrowRight')tourGo(1);else if(e.key==='ArrowLeft')tourGo(-1);};
+  tour.onpos=()=>placeTour();document.addEventListener('keydown',tour.onkey);addEventListener('resize',tour.onpos);addEventListener('scroll',tour.onpos,true);
+  showStep();
+}
+function tourGo(d){if(!tour)return;const n=tour.i+d;if(n<0)return;if(n>=tour.steps.length){endTour();return;}tour.i=n;showStep();}
+function showStep(){const st=tour.steps[tour.i],last=tour.i===tour.steps.length-1;if(st.go)st.go();
+  tour.card.replaceChildren(el('div',{class:'lbl',text:'Step '+(tour.i+1)+' of '+tour.steps.length}),el('h2',{id:'tTitle',text:st.t}),el('p',{text:st.b}),
+    el('div',{class:'tbtns'},[last?null:el('button',{class:'linkish',text:'Skip tour',onclick:endTour}),el('span',{class:'tsp'}),tour.i?el('button',{class:'ghost',text:'Back',onclick:()=>tourGo(-1)}):null,el('button',{class:'primary',id:'tNext',text:last?'Done':'Next',onclick:()=>tourGo(1)})]));
+  tour.target=null;placeTour();
+  setTimeout(()=>{if(!tour)return;const t=st.sel&&st.sel();tour.target=t&&t.getClientRects().length?t:null;if(tour.target)tour.target.scrollIntoView({block:'center'});placeTour();const nb=$('tNext');if(nb)nb.focus({preventScroll:true});},80);
+}
+function placeTour(){if(!tour)return;
+  const t=tour.target,c=tour.card,h=tour.hl,vh=innerHeight;
+  if(!t||!t.isConnected){h.style.display='none';tour.ov.classList.add('dim');Object.assign(c.style,{top:'50%',bottom:'',transform:'translate(-50%,-50%)'});return;}
+  tour.ov.classList.remove('dim');const r=t.getBoundingClientRect(),pad=6;h.style.display='block';
+  Object.assign(h.style,{top:(r.top-pad)+'px',left:(r.left-pad)+'px',width:(r.width+pad*2)+'px',height:(r.height+pad*2)+'px'});
+  c.style.transform='translateX(-50%)';const ch=c.offsetHeight;
+  if(vh-r.bottom>=ch+24)Object.assign(c.style,{top:(r.bottom+14)+'px',bottom:''});
+  else if(r.top>=ch+24)Object.assign(c.style,{top:(r.top-ch-14)+'px',bottom:''});
+  else Object.assign(c.style,{top:'',bottom:'12px'});
+}
+function endTour(){if(!tour)return;
+  document.removeEventListener('keydown',tour.onkey);removeEventListener('resize',tour.onpos);removeEventListener('scroll',tour.onpos,true);
+  tour.ov.remove();tour.hl.remove();tour.card.remove();setDemo(false);tour=null;mode='view';render();scrollTo(0,0);
+  store.set('pool-tour-seen','1');const b=$('tourBtn');if(b)b.focus();
+  if(poolId)loadPool(true);
+}
+$('tourBtn').addEventListener('click',startTour);
 
 // ---- Install as an app: Android/desktop get the browser's install prompt; iPhone gets Add to Home Screen steps.
 let installEvt=null;
@@ -647,7 +773,7 @@ const tfmt=t=>{const d=new Date(t),now=new Date(),time=d.toLocaleTimeString([],{
 function chatNote(m){$('chatNote').textContent=m||'';}
 function renderChat(){
   const fab=$('chatFab'),sh=$('chatSheet');
-  const show=!!(SB&&poolId&&pool&&!chatOff&&mode==='view');
+  const show=!!(SB&&poolId&&pool&&!chatOff&&mode==='view'&&!tourDemo);
   document.body.classList.toggle('haschat',show);
   if(!show){fab.hidden=true;sh.hidden=true;return;}
   const seen=+store.get(seenKey())||0,last=msgs.length?Date.parse(msgs[msgs.length-1].created_at):0;
@@ -705,6 +831,7 @@ async function start(){
     timer=setInterval(()=>{if(document.visibilityState==='visible'&&mode==='view')loadPool(true);},10000);
     document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadPool(true);});
   }else if(me)await loadMine();else render();
+  if(!poolId&&!store.get('pool-tour-seen'))setTimeout(()=>{if(mode==='view'&&!tour)startTour();},900);
   $('who').textContent=poolId?'Live pool. Refreshes every few seconds.':'Buy-ins, who\'s in, and what the pot pays out.';
 }
 start();

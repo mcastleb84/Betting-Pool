@@ -1,7 +1,7 @@
 // Pool Board service worker: makes the site installable and lets the app open even on a weak connection.
 // Pages and config are fetched fresh first (so updates show up right away) and fall back to the saved copy offline.
 // Live data (Supabase) is never cached.
-const VERSION = 'pool-board-v2';
+const VERSION = 'pool-board-v3';
 const SHELL = [
   './',
   './index.html',
