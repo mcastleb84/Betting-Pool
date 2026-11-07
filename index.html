@@ -175,15 +175,15 @@ function readHandle(idp){const app=$(idp+'App').value,h=cleanHandle($(idp+'Handl
 // list: [{key,name,place,payApp,payHandle,paidOut}], save(item,patch) with camelCase patch keys
 const hasScore=x=>x.score!==null&&x.score!==undefined&&x.score!==''&&isFinite(+x.score);
 // Points decide places automatically: highest score is 1st; ties share a place (and split its prize).
-function applyRanking(list,nPlaces){
+function applyRanking(list,nPlaces,low){
   const scored=list.filter(hasScore);if(!scored.length)return false;
-  const vals=[...new Set(scored.map(x=>+x.score))].sort((a,b)=>b-a);
+  const vals=[...new Set(scored.map(x=>+x.score))].sort((a,b)=>low?a-b:b-a);
   list.forEach(x=>{if(!hasScore(x)){x.place=0;return;}const r=vals.indexOf(+x.score)+1;x.place=r<=nPlaces?r:0;});
   return true;
 }
 const MEDAL=['gold','silver','bronze'];
-function rosterList(list,pays,org,splits,auto,h){
-  const order=list.map((x,i)=>({x,i})).sort((a,b)=>{const pa=a.x.place||99,pb=b.x.place||99;if(pa!==pb)return pa-pb;const sa=hasScore(a.x)?+a.x.score:-Infinity,sb=hasScore(b.x)?+b.x.score:-Infinity;if(sa!==sb)return sb-sa;return a.i-b.i;});
+function rosterList(list,pays,org,splits,auto,h,low){
+  const order=list.map((x,i)=>({x,i})).sort((a,b)=>{const pa=a.x.place||99,pb=b.x.place||99;if(pa!==pb)return pa-pb;const none=low?Infinity:-Infinity,sa=hasScore(a.x)?+a.x.score:none,sb=hasScore(b.x)?+b.x.score:none;if(sa!==sb)return low?sa-sb:sb-sa;return a.i-b.i;});
   return el('ul',{class:'roster'},order.map(({x},i)=>{
     const acts=el('div',{class:'acts'});
     if(org){
@@ -233,7 +233,7 @@ let me=null,pool=null,entries=[],mode='view',confirmDel=false,mine=[],timer=null
 function status(msg,err){const s=$('status');s.textContent=msg||'';s.className='status'+(err?' err':'');}
 const friendly=e=>{const m=(e&&e.message)||'';if(/full/i.test(m))return 'This pool is full.';if(/Invalid login/i.test(m))return 'That email and password don\'t match. Try again.';if(/fetch|network/i.test(m))return 'Can\'t reach the server. Check your connection and try again.';return m||'Something went wrong. Try again.';};
 const isOrg=()=>!!(me&&pool&&pool.organizer_id===me.id);
-const norm=p=>({...p,buy_in:+p.buy_in,splits:(p.splits&&p.splits.length?p.splits:[100]).map(Number),max_players:p.max_players||0});
+const norm=p=>({...p,buy_in:+p.buy_in,splits:(p.splits&&p.splits.length?p.splits:[100]).map(Number),max_players:p.max_players||0,low_wins:!!p.low_wins});
 function payouts(){const pot=pool.buy_in*entries.length;let left=Math.round(pot*100);return pool.splits.map((pct,i)=>{const c=i===pool.splits.length-1?left:Math.round(pot*pct);left-=c;return {pct,amt:c/100};});}
 
 async function loadPool(quiet){
@@ -299,7 +299,7 @@ function poolView(){
   const full=pool.max_players&&n>=pool.max_players;
   const myEntry=entries.find(x=>x.id===store.get('bp-joined-'+pool.id));
   const f=document.createDocumentFragment();
-  const chips=el('div',{class:'chips'},[el('span',{class:'chip',text:n+(pool.max_players?' of '+pool.max_players:'')+' in'}),full?el('span',{class:'chip gold',text:'Full'}):null,n&&paid===n?el('span',{class:'chip ok',text:'All paid'}):null]);
+  const chips=el('div',{class:'chips'},[el('span',{class:'chip',text:n+(pool.max_players?' of '+pool.max_players:'')+' in'}),pool.low_wins?el('span',{class:'chip',text:'Low score wins'}):null,full?el('span',{class:'chip gold',text:'Full'}):null,n&&paid===n?el('span',{class:'chip ok',text:'All paid'}):null]);
   f.append(el('div',{class:'slip'},[
     el('div',{class:'slip-head'},[el('h2',{text:pool.name}),chips]),
     el('div',{class:'hero'},[
@@ -329,16 +329,16 @@ function poolView(){
     f.append(el('section',{class:'block'},[el('h3',{text:'Invite your group'}),el('p',{class:'note',style:'margin:0',text:'Send this link. Anyone who opens it can add their name.'}),el('div',{class:'linkbox'},[el('input',{id:'shareLink',readonly:true,value:poolLink(pool.id),'aria-label':'Pool link',onfocus:e=>e.target.select()}),copyBtn(poolLink(pool.id),true)])]));
   }
   // payouts
-  const auto=applyRanking(entries,pool.splits.length);
+  const auto=applyRanking(entries,pool.splits.length,pool.low_wins);
   f.append(payoutsView(entries,pays,org,pool.name,(w,patch)=>{const row={};if('paidOut'in patch)row.paid_out=patch.paidOut;if('payApp'in patch)row.pay_app=patch.payApp;if('payHandle'in patch)row.pay_handle=patch.payHandle;Object.assign(w,patch);render();act(SB.from('bp_entries').update(row).eq('id',w.id),loadPool);}));
   // roster
   const list=rosterList(entries,pays,org,pool.splits,auto,{
     paid:x=>{x.paid=!x.paid;render();act(SB.from('bp_entries').update({paid:x.paid}).eq('id',x.id),loadPool);},
     place:(x,v)=>{x.place=v;render();act(SB.from('bp_entries').update({place:v}).eq('id',x.id),loadPool);},
     score:(x,v)=>{x.score=v;render();act(SB.from('bp_entries').update({score:v}).eq('id',x.id),loadPool);},
-    remove:x=>{entries=entries.filter(y=>y.id!==x.id);render();act(SB.from('bp_entries').delete().eq('id',x.id),loadPool);}});
+    remove:x=>{entries=entries.filter(y=>y.id!==x.id);render();act(SB.from('bp_entries').delete().eq('id',x.id),loadPool);}},pool.low_wins);
   const kids=[el('h3',{text:'Who\'s in'})];
-  if(org&&n)kids.push(el('p',{class:'autonote',text:'Type each person\'s points. Highest score takes 1st place automatically.'}));
+  if(org&&n)kids.push(el('p',{class:'autonote',text:'Type each person\'s points. '+(pool.low_wins?'Lowest':'Highest')+' score takes 1st place automatically.'}));
   kids.push(n?list:el('div',{class:'note',text:'Nobody yet. Be the first to join.'}));
   if(org){
     const inp=el('input',{id:'addName',placeholder:full?'Pool is full':'Add someone by name',maxlength:'40',autocomplete:'off',disabled:full,'aria-label':'Player name'});
@@ -369,11 +369,12 @@ function formView(p){
     el('label',{class:'full'},['Pool name',el('input',{id:'fName',required:true,maxlength:'60',placeholder:'Sunday Night Football pool',value:p?p.name:''})]),
     el('label',{},['Buy-in to join ($)',el('input',{id:'fBuy',type:'number',inputmode:'decimal',min:'1',step:'0.01',required:true,placeholder:'20',value:p?String(p.buy_in):''})]),
     el('label',{},['Max players (optional)',el('input',{id:'fMax',type:'number',inputmode:'numeric',min:'2',step:'1',placeholder:'No limit',value:p&&p.max_players?String(p.max_players):''})]),
+    el('label',{class:'full'},['Who wins',el('select',{id:'fLow'},[el('option',{value:'0',text:'Highest score wins',selected:!(p&&p.low_wins)}),el('option',{value:'1',text:'Lowest score wins (like golf)',selected:!!(p&&p.low_wins)})])]),
     el('label',{class:'full'},['How the pot pays out',el('select',{id:'fSplit'},PRESETS.map(x=>el('option',{value:x.k,text:x.label,selected:x.k===curK})))]),
     el('label',{class:'full'},['Where to send money (optional)',el('input',{id:'fPay',maxlength:'80',placeholder:'Venmo @yourname or Cash App $yourname',value:p&&p.pay_info?p.pay_info:''})]),
     el('div',{class:'formacts'},[el('button',{type:'button',class:'ghost',text:'Cancel',onclick:()=>{mode='view';render();}}),el('button',{type:'submit',class:'primary',text:p?'Save changes':'Create pool'})]));
   f.addEventListener('submit',async e=>{e.preventDefault();
-    const row={name:$('fName').value.trim(),buy_in:Math.round(parseFloat($('fBuy').value)*100)/100,max_players:parseInt($('fMax').value,10)||null,splits:PRESETS.find(x=>x.k===$('fSplit').value).s,pay_info:$('fPay').value.trim()||null};
+    const row={name:$('fName').value.trim(),buy_in:Math.round(parseFloat($('fBuy').value)*100)/100,max_players:parseInt($('fMax').value,10)||null,splits:PRESETS.find(x=>x.k===$('fSplit').value).s,pay_info:$('fPay').value.trim()||null,low_wins:$('fLow').value==='1'};
     if(!row.name||!(row.buy_in>0)){status('Give the pool a name and a buy-in above $0.',true);return;}
     status('Saving…');
     if(p){const r=await SB.from('bp_pools').update(row).eq('id',p.id);if(r.error){status(friendly(r.error),true);return;}
