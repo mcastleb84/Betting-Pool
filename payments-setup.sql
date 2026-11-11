@@ -27,3 +27,17 @@ begin
 end $$;
 revoke all on function public.bp_mark_sent(uuid, uuid, text) from public;
 grant execute on function public.bp_mark_sent(uuid, uuid, text) to anon, authenticated;
+
+-- ===== Winners add where to get paid (added later; safe to run again) =====
+-- A winner can set their own PayPal, Cash App or Venmo from their phone so the organizer can pay them in one tap.
+create or replace function public.bp_set_payout(eid uuid, tok uuid, app text, handle text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if app not in ('paypal','cashapp','venmo') then raise exception 'Unknown payment app'; end if;
+  if handle !~ '^[A-Za-z0-9_-]{1,30}$' then raise exception 'Use letters, numbers, - or _ in the username'; end if;
+  update bp_entries set pay_app = app, pay_handle = handle
+   where id = eid and join_token is not null and join_token = tok and paid_out = false;
+  if not found then raise exception 'That entry can''t be updated from this device'; end if;
+end $$;
+revoke all on function public.bp_set_payout(uuid, uuid, text, text) from public;
+grant execute on function public.bp_set_payout(uuid, uuid, text, text) to anon, authenticated;
