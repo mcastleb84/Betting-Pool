@@ -187,7 +187,6 @@ alter table public.bp_pools drop constraint if exists bp_pools_event_check;
 alter table public.bp_pools add constraint bp_pools_event_check check (event is null or char_length(event) <= 80);
 alter table public.bp_pools drop constraint if exists bp_pools_tour_check;
 alter table public.bp_pools add constraint bp_pools_tour_check check (tour is null or tour in ('pga','lpga','eur','atp','wta'));
-notify pgrst, 'reload schema';
 
 -- ================= chat-setup.sql =================
 -- Game chat for the betting pool. Run once in Supabase: SQL Editor → New query → paste all of this → Run.
@@ -286,5 +285,17 @@ end $$;
 revoke all on function public.bp_set_payout(uuid, uuid, text, text) from public;
 grant execute on function public.bp_set_payout(uuid, uuid, text, text) to anon, authenticated;
 
--- Tell Supabase to pick up the new columns right away.
+
+-- ================= fix-access.sql =================
+alter table public.bp_entries add column if not exists score numeric(12,2);
+alter table public.bp_entries add column if not exists agreed_at timestamptz;
+alter table public.bp_entries add column if not exists pick text;
+alter table public.bp_entries add column if not exists chosen text[] not null default '{}';
+alter table public.bp_entries add column if not exists sent_via text;
+alter table public.bp_entries add column if not exists sent_at timestamptz;
+grant select (id, pool_id, name, paid, place, paid_out, score, pick, chosen, agreed_at, created_at, sent_via, sent_at)
+  on public.bp_entries to anon, authenticated;
+grant insert on public.bp_entries to anon, authenticated;
+grant update, delete on public.bp_entries to authenticated;
+grant select on public.bp_pools to anon, authenticated;
 notify pgrst, 'reload schema';
