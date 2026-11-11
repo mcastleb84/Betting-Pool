@@ -567,9 +567,12 @@ async function loadPool(quiet){
   }catch(err){status(friendly(err),true);if(!pool)render();}
 }
 async function loadMine(){
-  const {data,error}=await SB.from('bp_pools').select('*, bp_entries(count)').eq('organizer_id',me.id).order('created_at',{ascending:false});
-  if(error){status(friendly(error),true);return;}
-  mine=data.map(x=>({...norm(x),count:(x.bp_entries&&x.bp_entries[0]&&x.bp_entries[0].count)||0}));render();
+  // Count players with a plain column read: an embedded count needs read access to every column, and payout usernames are private.
+  const {data,error}=await SB.from('bp_pools').select('*').eq('organizer_id',me.id).order('created_at',{ascending:false});
+  if(error){status(friendly(error),true);render();return;}
+  const counts={};
+  if(data.length){const e=await SB.from('bp_entries').select('pool_id').in('pool_id',data.map(x=>x.id));if(!e.error)(e.data||[]).forEach(r=>{counts[r.pool_id]=(counts[r.pool_id]||0)+1;});}
+  mine=data.map(x=>({...norm(x),count:counts[x.id]||0}));status('');render();
 }
 async function act(promise,after){status('Saving…');const r=await promise;if(r&&r.error){status(friendly(r.error),true);}else status('');if(after)await after();}
 
