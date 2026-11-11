@@ -5,7 +5,7 @@ Betting pools with friends: buy-ins, who's in, the pot, payouts and a live game 
 ## Setup (once)
 
 1. In Supabase, open **SQL Editor → New query**, paste `pool-setup.sql`, and run it.
-2. Do the same with `chat-setup.sql` (game chat) and `sports-setup.sql` (sport tabs).
+2. Do the same with `chat-setup.sql` (game chat), `sports-setup.sql` (sport tabs) and `payments-setup.sql` (PayPal, Cash App and Venmo buy-in buttons).
 3. In GitHub, go to **Settings → Pages**, set the source to **Deploy from a branch**, branch **main**, folder **/ (root)**, and save.
 
 ## Google and Apple sign-in (once)
@@ -28,6 +28,10 @@ The buttons are on the log-in screen; each one starts working once it's turned o
 
 Someone who used email before and then taps Google or Apple with the same email lands in the same account.
 
+## Buy-in payments
+
+When you create or edit a pool, fill in your PayPal.me username, Cash App $cashtag and/or Venmo username. Players get a button for each one that opens the app with the buy-in amount already filled in. After paying, a player taps **I paid with…** so you know which app to check; their name shows "Says sent" until you tap **Paid**. The money goes straight from them to you; the site never holds it.
+
 ## Getting the app
 
 - **Android / Chrome / Edge:** open the site and tap **Get the app** (or Install in the browser menu).
@@ -38,4 +42,4 @@ Someone who used email before and then taps Google or Apple with the same email 
 - `index.html` – the app
 - `config.js` – Supabase connection (publishable key only)
 - `manifest.webmanifest`, `sw.js`, `icons/` – what makes it installable
-- `pool-setup.sql`, `chat-setup.sql`, `sports-setup.sql` – database setup
+- `pool-setup.sql`, `chat-setup.sql`, `sports-setup.sql`, `payments-setup.sql` – database setup

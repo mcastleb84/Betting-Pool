@@ -89,6 +89,17 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .payinfo{margin:0 18px 14px;padding:10px 12px;border-radius:10px;background:var(--gold-soft);display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .payinfo span{font-weight:600;min-width:0;overflow-wrap:anywhere}
 .payinfo button{padding:6px 12px;font-size:13px;background:var(--surface);border-color:var(--line);color:var(--ink)}
+.paybox{margin:0 18px 14px;padding:12px;border-radius:12px;background:var(--gold-soft);display:flex;flex-direction:column;gap:8px}
+.payways{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.payway{display:flex;flex-direction:column;gap:1px;text-decoration:none;border-radius:10px;padding:10px 12px;color:#fff;min-width:0}
+.payway b{font-size:16px;font-weight:700}.payway span{font-size:12px;opacity:.9;overflow-wrap:anywhere}
+.payway.paypal{background:#003087}.payway.cashapp{background:#00a046}.payway.venmo{background:#0074de}
+.payway:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.payother{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-weight:600;overflow-wrap:anywhere}
+.payother button{padding:6px 12px;font-size:13px;background:var(--surface);border-color:var(--line);color:var(--ink)}
+.sentbox{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);font-size:14px}
+.sentbox .payrow button{padding:8px 12px;font-size:14px}
+.roster small.sent{color:var(--gold);font-weight:700}
 section.block{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
 section.block h3{margin:0;font-family:var(--display);font-weight:700;font-size:22px;text-transform:uppercase;letter-spacing:.02em}
 .places{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
@@ -277,16 +288,35 @@ const ORD=['1st','2nd','3rd'];
 const fmt=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:n%1?2:0,maximumFractionDigits:2}).format(n);
 const el=(tag,props={},kids=[])=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(props)){if(k==='text')e.textContent=v;else if(k==='class')e.className=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(k,v===true?'':v);}for(const c of [].concat(kids))if(c)e.append(c);return e;};
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
-const COLS='id,pool_id,name,paid,place,paid_out,score,pick,chosen,agreed_at,created_at';
-const APPS={venmo:{label:'Venmo',pre:'@'},cashapp:{label:'Cash App',pre:'$'}};
-const cleanHandle=h=>String(h||'').trim().replace(/^[@$]+/,'').replace(/\s+/g,'');
+const COLS0='id,pool_id,name,paid,place,paid_out,score,pick,chosen,agreed_at,created_at';let COLS=COLS0+',sent_via';
+const APPS={venmo:{label:'Venmo',pre:'@'},cashapp:{label:'Cash App',pre:'$'},paypal:{label:'PayPal',pre:'paypal.me/'}};
+const PAY_ORDER=['paypal','cashapp','venmo'],SENT_LABEL={paypal:'PayPal',cashapp:'Cash App',venmo:'Venmo',other:'another way'};
+const cleanHandle=h=>String(h||'').trim().replace(/^(https?:\/\/)?(www\.)?(paypal\.me|paypal\.com\/paypalme|cash\.app|venmo\.com)\/+/i,'').replace(/^[@$]+/,'').replace(/[\/?#].*$/,'').replace(/\s+/g,'');
 const okHandle=h=>/^[A-Za-z0-9_-]{1,30}$/.test(h);
 function payLink(app,handle,amt,note){const a=amt.toFixed(2);
   if(app==='cashapp')return 'https://cash.app/$'+encodeURIComponent(handle)+'/'+a;
+  if(app==='paypal')return 'https://paypal.me/'+encodeURIComponent(handle)+'/'+a+'USD';
   return 'https://venmo.com/?txn=pay&audience=private&recipients='+encodeURIComponent(handle)+'&amount='+a+'&note='+encodeURIComponent(note);}
 function handleFields(idp,app,handle){
   return [el('select',{id:idp+'App','aria-label':'Payment app'},Object.entries(APPS).map(([k,v])=>el('option',{value:k,text:v.label,selected:k===(app||'venmo')}))),
           el('input',{id:idp+'Handle',placeholder:'Username',maxlength:'31',autocomplete:'off',autocapitalize:'off',spellcheck:'false','aria-label':'Payment username',value:handle||''})];
+}
+// Buy-in: one button per app the organizer takes (h = {paypal,cashapp,venmo}); each opens the app with the amount filled in.
+const payWays=h=>PAY_ORDER.filter(k=>h&&h[k]);
+const payToText=(h,other)=>payWays(h).map(k=>APPS[k].label+' '+APPS[k].pre+h[k]).concat(other?[other]:[]).join(', ');
+function payBox(h,amt,note,other,copy){
+  const ways=payWays(h);if(!ways.length&&!other)return null;
+  return el('div',{class:'paybox'},[el('div',{class:'lbl',text:'Pay the '+fmt(amt)+' buy-in'}),
+    ways.length?el('div',{class:'payways'},ways.map(k=>el('a',{class:'payway '+k,href:payLink(k,h[k],amt,note),target:'_blank',rel:'noopener','aria-label':'Pay '+fmt(amt)+' with '+APPS[k].label},[el('b',{text:APPS[k].label}),el('span',{text:APPS[k].pre+h[k]})]))):null,
+    other?el('div',{class:'payother'},[el('span',{text:(ways.length?'Or: ':'Pay to: ')+other}),copy?copy(other):null]):null]);
+}
+// After paying, the player says which app they used; the organizer checks it arrived and taps Paid.
+function sentBox(x,h,other,onSent){
+  if(x.paid)return el('div',{class:'you',text:'Your buy-in is marked paid. You\'re all set.'});
+  if(x.sentVia)return el('div',{class:'sentbox'},[el('span',{text:'You said you sent it on '+SENT_LABEL[x.sentVia]+'. The organizer will mark you paid once it arrives.'}),el('div',{},[el('button',{type:'button',class:'linkish',text:'I haven\'t sent it yet',onclick:()=>onSent(null)})])]);
+  const opts=payWays(h).concat(other||!payWays(h).length?['other']:[]);
+  return el('div',{class:'sentbox'},[el('span',{text:'Sent your buy-in? Tap the app you used so the organizer knows to look for it.'}),
+    el('div',{class:'payrow'},opts.map(k=>el('button',{type:'button',class:'ghost',text:k==='other'?'I paid another way':'I paid with '+APPS[k].label,onclick:()=>onSent(k)})))]);
 }
 function readHandle(idp){const app=$(idp+'App').value,h=cleanHandle($(idp+'Handle').value);return {app,h};}
 // list: [{key,name,place,payApp,payHandle,paidOut}], save(item,patch) with camelCase patch keys
@@ -316,7 +346,7 @@ function rosterList(list,pays,org,splits,auto,h,low,pk){
     const tied=pl?list.filter(y=>y.place===pl).length:1;
     const win=pl?ORD[pl-1]+' place · wins '+fmt(Math.round(pays[pl-1].amt/tied*100)/100):null;
     const badge=pl?el('span',{class:'num medal '+MEDAL[pl-1],title:ORD[pl-1]+' place',text:String(pl)}):el('span',{class:'num',text:String(i+1)});
-    return el('li',{class:pl?'won '+MEDAL[pl-1]:''},[badge,el('span',{class:'pname'},[x.name,pickCell(x,pk,org,list,h),win?el('small',{text:win}):null]),acts]);
+    return el('li',{class:pl?'won '+MEDAL[pl-1]:''},[badge,el('span',{class:'pname'},[x.name,pickCell(x,pk,org,list,h),!x.paid&&x.sentVia?el('small',{class:'sent',text:'Says sent on '+SENT_LABEL[x.sentVia]+(org?' · check, then tap Paid':' · waiting on organizer')}):null,win?el('small',{text:win}):null]),acts]);
   }));
 }
 // Pool Terms – Promise to Pay. c = {name, buyIn, payTo, splits, low}
@@ -327,11 +357,11 @@ function termsItems(c){
     ['The pot','Every buy-in goes into the pot. The organizer keeps no cut: all the money collected is paid out to the winners.'],
     ['Prizes',split+' Places are set by the scores the organizer posts on this page, and the '+(c.low?'lowest':'highest')+' score wins. '+(c.pickLabel?' Each player picks '+nOf(c.each||1,c.pickLabel)+'. If the organizer posts a winning '+c.pickLabel.toLowerCase()+', everyone who picked it shares 1st place instead.':'')+' Players tied for a place split that place\'s prize equally.'],
     ['When victory is confirmed','A win is confirmed once the game is final and the organizer posts the final scores here. Anyone in the pool has 24 hours after that to point out a mistake to the organizer. After 24 hours, the results are final.'],
-    ['Promise to pay the winners','Once victory is confirmed, the organizer promises to pay each winner their full prize within 48 hours, to the Venmo or Cash App username the winner gave, and to mark it "Paid out" on this page.'],
+    ['Promise to pay the winners','Once victory is confirmed, the organizer promises to pay each winner their full prize within 48 hours, to the PayPal, Cash App or Venmo username the winner gave, and to mark it "Paid out" on this page.'],
     ['If the pool is canceled','If the game is canceled or the pool can\'t be decided, the organizer returns every buy-in in full within 48 hours.'],
     ['Fair play','One entry per person unless the organizer allows more. Scores come only from the official game result.'],
     ['Who can join','You must be 18 or older, and betting pools must be allowed where you live.'],
-    ['A personal agreement','This is an agreement between the people in this pool. This website, Venmo and Cash App are only tools. They don\'t hold the money or guarantee any payment.'],
+    ['A personal agreement','This is an agreement between the people in this pool. This website, PayPal, Cash App and Venmo are only tools. They don\'t hold the money or guarantee any payment.'],
   ];
 }
 function termsView(c,open){
@@ -499,8 +529,8 @@ function payoutsView(list,pays,org,poolName,save){
             el('a',{class:'paybtn',href:payLink(w.payApp,w.payHandle,each,poolName+' – '+ORD[i]+' place'),target:'_blank',rel:'noopener',text:'Pay '+fmt(each)+' on '+a.label}),
             el('button',{class:'ghost small',text:'Mark paid out',onclick:()=>save(w,{paidOut:true})})]),
             el('div',{class:'note',text:'To '+a.pre+w.payHandle+' · ',},[el('button',{class:'linkish',text:'change',onclick:e=>{e.currentTarget.closest('.winner').querySelector('.hform').hidden=false;}})]));}
-        const idp='h'+w.key;const form=el('div',{class:'hform add',hidden:!!w.payHandle},[...handleFields(idp,w.payApp,w.payHandle),el('button',{class:'primary',text:'Save',onclick:()=>{const r=readHandle(idp);if(!okHandle(r.h)){status('Enter a Venmo or Cash App username, letters and numbers only.',true);return;}save(w,{payApp:r.app,payHandle:r.h});}})]);
-        if(!w.payHandle)row.append(el('div',{class:'note',text:'Add '+w.name+'\'s Venmo or Cash App to pay them in one tap.'}));
+        const idp='h'+w.key;const form=el('div',{class:'hform add',hidden:!!w.payHandle},[...handleFields(idp,w.payApp,w.payHandle),el('button',{class:'primary',text:'Save',onclick:()=>{const r=readHandle(idp);if(!okHandle(r.h)){status('Enter a PayPal, Cash App or Venmo username, letters and numbers only.',true);return;}save(w,{payApp:r.app,payHandle:r.h});}})]);
+        if(!w.payHandle)row.append(el('div',{class:'note',text:'Add '+w.name+'\'s PayPal, Cash App or Venmo to pay them in one tap.'}));
         row.append(form);
       }
       kids.push(row);
@@ -515,15 +545,17 @@ let me=null,pool=null,entries=[],mode='view',confirmDel=false,mine=[],timer=null
 function status(msg,err){const s=$('status');s.textContent=msg||'';s.className='status'+(err?' err':'');}
 const friendly=e=>{const m=(e&&e.message)||'';if(/full/i.test(m))return 'This pool is full.';if(/taken/i.test(m))return 'Someone already picked that. Choose another.';if(/pick/i.test(m)&&/choose|allowed|valid|policy/i.test(m))return 'Choose one of the listed picks.';if(/row-level security/i.test(m))return 'That didn\'t go through. Check your pick and try again.';if(/Invalid login/i.test(m))return 'That email and password don\'t match. Try again.';if(/fetch|network/i.test(m))return 'Can\'t reach the server. Check your connection and try again.';return m||'Something went wrong. Try again.';};
 const isOrg=()=>!!(me&&pool&&pool.organizer_id===me.id);
-const norm=p=>({...p,buy_in:+p.buy_in,splits:(p.splits&&p.splits.length?p.splits:[100]).map(Number),max_players:p.max_players||0,low_wins:!!p.low_wins,picks:cleanPicks(p.picks),pickLabel:String(p.pick_label||'Team').slice(0,20),uniquePicks:!!p.unique_picks,picksEach:Math.max(1,+p.picks_each||1),winningPick:String(p.winning_pick||''),sport:SPORT_NAME[p.sport]!==undefined?String(p.sport):'custom',event:String(p.event||''),tour:String(p.tour||'')});
+const norm=p=>({...p,buy_in:+p.buy_in,splits:(p.splits&&p.splits.length?p.splits:[100]).map(Number),max_players:p.max_players||0,low_wins:!!p.low_wins,picks:cleanPicks(p.picks),pickLabel:String(p.pick_label||'Team').slice(0,20),uniquePicks:!!p.unique_picks,picksEach:Math.max(1,+p.picks_each||1),winningPick:String(p.winning_pick||''),payH:{paypal:okHandle(cleanHandle(p.pay_paypal))?cleanHandle(p.pay_paypal):'',cashapp:okHandle(cleanHandle(p.pay_cashapp))?cleanHandle(p.pay_cashapp):'',venmo:okHandle(cleanHandle(p.pay_venmo))?cleanHandle(p.pay_venmo):''},sport:SPORT_NAME[p.sport]!==undefined?String(p.sport):'custom',event:String(p.event||''),tour:String(p.tour||'')});
 function payouts(){const pot=pool.buy_in*entries.length;let left=Math.round(pot*100);return pool.splits.map((pct,i)=>{const c=i===pool.splits.length-1?left:Math.round(pot*pct);left-=c;return {pct,amt:c/100};});}
 
 async function loadPool(quiet){
   if(tourDemo)return;
   try{
-    const [p,e]=await Promise.all([SB.from('bp_pools').select('*').eq('id',poolId).maybeSingle(),SB.from('bp_entries').select(COLS).eq('pool_id',poolId).order('created_at')]);
+    let [p,e]=await Promise.all([SB.from('bp_pools').select('*').eq('id',poolId).maybeSingle(),SB.from('bp_entries').select(COLS).eq('pool_id',poolId).order('created_at')]);
+    // Before payments-setup.sql has run there's no sent_via column; load without it.
+    if(e.error&&COLS!==COLS0&&/sent_via/i.test(e.error.message||'')){COLS=COLS0;e=await SB.from('bp_entries').select(COLS).eq('pool_id',poolId).order('created_at');}
     if(p.error)throw p.error;if(e.error)throw e.error;
-    pool=p.data?norm(p.data):null;entries=(e.data||[]).map(x=>({...x,key:x.id,paidOut:!!x.paid_out,payApp:'venmo',payHandle:'',score:x.score===null||x.score===undefined?null:+x.score}));
+    pool=p.data?norm(p.data):null;entries=(e.data||[]).map(x=>({...x,key:x.id,sentVia:SENT_LABEL[x.sent_via]?x.sent_via:'',paidOut:!!x.paid_out,payApp:'venmo',payHandle:'',score:x.score===null||x.score===undefined?null:+x.score}));
     if(isOrg()){const h=await SB.rpc('bp_pay_handles',{pid:poolId});if(!h.error&&h.data)h.data.forEach(r=>{const x=entries.find(y=>y.id===r.id);if(x){x.payApp=r.pay_app==='cashapp'?'cashapp':'venmo';x.payHandle=r.pay_handle||'';}});}
     if(mode==='view')render();
     if(!quiet)status('');
@@ -610,10 +642,15 @@ function poolView(){
       el('div',{class:'row'},[el('span',{},['Collected ',el('b',{text:fmt(got)})]),el('span',{text:paid+' of '+n+' paid'})]),
       el('div',{class:'bar',role:'progressbar','aria-valuemin':'0','aria-valuemax':String(n||1),'aria-valuenow':String(paid),'aria-label':'Buy-ins collected'},[el('i',{style:'width:'+(n?Math.round(paid/n*100):0)+'%'})]),
       n-paid>0?el('div',{class:'row'},[el('span',{text:'Still owed'}),el('b',{text:fmt(pot-got)})]):null]),
-    pool.pay_info?el('div',{class:'payinfo'},[el('span',{text:'Pay to: '+pool.pay_info}),copyBtn(pool.pay_info)]):null]));
+    payBox(pool.payH,pool.buy_in,pool.name+' buy-in',pool.pay_info,t=>copyBtn(t))]));
   // join
   if(!org){
-    if(myEntry)f.append(el('div',{class:'you',text:'You\'re in as '+myEntry.name+'. '+(myEntry.paid?'Your buy-in is marked paid.':'Send your '+fmt(pool.buy_in)+' buy-in'+(pool.pay_info?' to '+pool.pay_info:' to the organizer')+'.')}));
+    if(myEntry){const tok=store.get('bp-token-'+pool.id);
+      f.append(el('div',{class:'you',text:'You\'re in as '+myEntry.name+'.'+(myEntry.paid?'':' Send your '+fmt(pool.buy_in)+' buy-in'+(payWays(pool.payH).length?' with the pay buttons above.':pool.pay_info?' to '+pool.pay_info+'.':' to the organizer.'))}));
+      if(tok&&!myEntry.paid)f.append(sentBox(myEntry,pool.payH,pool.pay_info,async via=>{status('Saving…');const r=await SB.rpc('bp_mark_sent',{eid:myEntry.id,tok,via});
+        if(r.error){status(/function|schema cache/i.test(r.error.message||'')?'The organizer needs to finish setting up payments. Let them know you sent it.':friendly(r.error),true);return;}
+        status(via?'Thanks! The organizer will check '+SENT_LABEL[via]+' and mark you paid.':'');await loadPool(true);}));
+      else if(myEntry.paid)f.append(sentBox(myEntry,pool.payH,pool.pay_info,()=>{}));}
     else if(full)f.append(el('div',{class:'you',text:'This pool is full.'}));
     else{
       const jc=pool.picks.length?pickChooser('joinPick',{picks:pool.picks,label:pool.pickLabel,unique:pool.uniquePicks,each:pool.picksEach},entries.map(e=>({...e,key:e.id})),null,[],'Choose your '+pool.pickLabel.toLowerCase()):null;
@@ -621,13 +658,15 @@ function poolView(){
       const join=async()=>{const v=inp.value.trim();if(!v){status('Type your name to join.',true);return;}
         const jp=jc?jc.value():[];if(jc&&jp.length!==pool.picksEach){status('Choose '+nOf(pool.picksEach,pool.pickLabel)+' to join.',true);return;}
         if(!$('agreeTerms').checked){status('Check the box to agree to the pool terms before you join.',true);$('agreeTerms').focus();return;}
-        const hd=readHandle('join');if(hd.h&&!okHandle(hd.h)){status('That username has characters Venmo and Cash App don\'t use. Use letters, numbers, - or _.',true);return;}
-        status('Joining…');const id=crypto.randomUUID();
-        const r=await SB.from('bp_entries').insert({id,pool_id:pool.id,name:v,pay_app:hd.h?hd.app:null,pay_handle:hd.h||null,chosen:jp,agreed_at:new Date().toISOString()});
+        const hd=readHandle('join');if(hd.h&&!okHandle(hd.h)){status('That username has characters PayPal, Cash App and Venmo don\'t use. Use letters, numbers, - or _.',true);return;}
+        status('Joining…');const id=crypto.randomUUID(),tok=crypto.randomUUID();
+        const row={id,pool_id:pool.id,name:v,pay_app:hd.h?hd.app:null,pay_handle:hd.h||null,chosen:jp,agreed_at:new Date().toISOString(),join_token:tok};
+        let r=await SB.from('bp_entries').insert(row);
+        let useTok=true;if(r.error&&/join_token|pay_app/i.test(r.error.message||'')){useTok=false;delete row.join_token;if(row.pay_app==='paypal'){row.pay_app=null;row.pay_handle=null;}r=await SB.from('bp_entries').insert(row);}
         if(r.error){status(friendly(r.error),true);return;}
-        store.set('bp-joined-'+pool.id,id);status('');await loadPool();};
+        store.set('bp-joined-'+pool.id,id);if(useTok)store.set('bp-token-'+pool.id,tok);status('');await loadPool();};
       inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();join();}});
-      f.append(el('section',{class:'block'},[el('h3',{text:'Join this pool'}),el('p',{class:'note',style:'margin:0',text:'Add your name, then send your '+fmt(pool.buy_in)+' buy-in'+(pool.pay_info?' to '+pool.pay_info:' to the organizer')+'. The organizer marks you paid.'}),el('div',{class:'join'},[inp,jc?el('div',{class:'lbl',text:pool.picksEach>1?'Pick your '+nOf(pool.picksEach,pool.pickLabel):'Your '+pool.pickLabel.toLowerCase()}):null,jc?jc.node:null,el('div',{class:'lbl',text:'If you win, get paid on'}),el('div',{class:'add'},handleFields('join','venmo','')),el('label',{class:'agree'},[el('input',{type:'checkbox',id:'agreeTerms'}),el('span',{},['I agree to the ',el('a',{href:'#terms',text:'pool terms',onclick:e=>{e.preventDefault();const d=$('terms');d.open=true;d.scrollIntoView({behavior:'smooth'});}}),', including paying my '+fmt(pool.buy_in)+' buy-in before the game starts.'])]),el('button',{class:'primary',text:'Join for '+fmt(pool.buy_in),onclick:join})])]));
+      f.append(el('section',{class:'block'},[el('h3',{text:'Join this pool'}),el('p',{class:'note',style:'margin:0',text:'Add your name, then pay your '+fmt(pool.buy_in)+' buy-in'+(payWays(pool.payH).length?' with '+payWays(pool.payH).map(k=>APPS[k].label).join(', ').replace(/, ([^,]*)$/,' or $1'):pool.pay_info?' to '+pool.pay_info:' to the organizer')+'. The organizer marks you paid once it arrives.'}),el('div',{class:'join'},[inp,jc?el('div',{class:'lbl',text:pool.picksEach>1?'Pick your '+nOf(pool.picksEach,pool.pickLabel):'Your '+pool.pickLabel.toLowerCase()}):null,jc?jc.node:null,el('div',{class:'lbl',text:'If you win, get paid on'}),el('div',{class:'add'},handleFields('join','venmo','')),el('label',{class:'agree'},[el('input',{type:'checkbox',id:'agreeTerms'}),el('span',{},['I agree to the ',el('a',{href:'#terms',text:'pool terms',onclick:e=>{e.preventDefault();const d=$('terms');d.open=true;d.scrollIntoView({behavior:'smooth'});}}),', including paying my '+fmt(pool.buy_in)+' buy-in before the game starts.'])]),el('button',{class:'primary',text:'Join for '+fmt(pool.buy_in),onclick:join})])]));
     }
   }else{
     f.append(el('section',{class:'block'},[el('h3',{text:'Invite your group'}),el('p',{class:'note',style:'margin:0',text:'Send this link. Anyone who opens it can add their name.'}),el('div',{class:'linkbox'},[el('input',{id:'shareLink',readonly:true,value:poolLink(pool.id),'aria-label':'Pool link',onfocus:e=>e.target.select()}),copyBtn(poolLink(pool.id),true)])]));
@@ -657,7 +696,7 @@ function poolView(){
     kids.push(el('div',{class:'add'},[inp,ac&&PK.each===1?ac.node:null,el('button',{class:'primary',text:'Add',disabled:full,onclick:add})]));
   }
   f.append(el('section',{class:'block'},kids));
-  f.append(termsView({name:pool.name,buyIn:pool.buy_in,payTo:pool.pay_info,splits:pool.splits,low:pool.low_wins,pickLabel:pool.picks.length?pool.pickLabel:'',each:pool.picksEach}));
+  f.append(termsView({name:pool.name,buyIn:pool.buy_in,payTo:payToText(pool.payH,pool.pay_info),splits:pool.splits,low:pool.low_wins,pickLabel:pool.picks.length?pool.pickLabel:'',each:pool.picksEach}));
   if(org){
     f.append(el('div',{class:'foot'},[
       el('button',{class:'ghost',text:'Edit pool',onclick:()=>{mode='form';render();}}),
@@ -683,18 +722,25 @@ function formView(p){
     ...pickFields(p),
     el('label',{class:'full'},['Who wins',el('select',{id:'fLow'},[el('option',{value:'0',text:'Highest score wins',selected:!(p?p.low_wins:curSport==='golf')}),el('option',{value:'1',text:'Lowest score wins (like golf)',selected:!!(p?p.low_wins:curSport==='golf')})])]),
     el('label',{class:'full'},['How the pot pays out',el('select',{id:'fSplit'},PRESETS.map(x=>el('option',{value:x.k,text:x.label,selected:x.k===curK})))]),
-    el('label',{class:'full'},['Where to send money (optional)',el('input',{id:'fPay',maxlength:'80',placeholder:'Venmo @yourname or Cash App $yourname',value:p&&p.pay_info?p.pay_info:''})]),
+    el('p',{class:'sportnote',text:'How players pay the buy-in. Fill in the apps you take; each one becomes a pay button with the amount filled in.'}),
+    el('label',{},['PayPal.me username',el('input',{id:'fPaypal',maxlength:'40',placeholder:'yourname',autocomplete:'off',autocapitalize:'off',spellcheck:'false',value:p&&p.payH?p.payH.paypal:''})]),
+    el('label',{},['Cash App $cashtag',el('input',{id:'fCashapp',maxlength:'40',placeholder:'$yourname',autocomplete:'off',autocapitalize:'off',spellcheck:'false',value:p&&p.payH&&p.payH.cashapp?'$'+p.payH.cashapp:''})]),
+    el('label',{},['Venmo username',el('input',{id:'fVenmo',maxlength:'40',placeholder:'@yourname',autocomplete:'off',autocapitalize:'off',spellcheck:'false',value:p&&p.payH&&p.payH.venmo?'@'+p.payH.venmo:''})]),
+    el('label',{},['Other way to pay (optional)',el('input',{id:'fPay',maxlength:'80',placeholder:'Zelle 555-123-4567',value:p&&p.pay_info?p.pay_info:''})]),
     el('div',{class:'formacts'},[el('button',{type:'button',class:'ghost',text:'Cancel',onclick:()=>{mode='view';render();}}),el('button',{type:'submit',class:'primary',text:p?'Save changes':'Create pool'})]));
   f.addEventListener('submit',async e=>{e.preventDefault();
     const row={name:$('fName').value.trim(),buy_in:Math.round(parseFloat($('fBuy').value)*100)/100,max_players:parseInt($('fMax').value,10)||null,splits:PRESETS.find(x=>x.k===$('fSplit').value).s,pay_info:$('fPay').value.trim()||null,low_wins:$('fLow').value==='1'};const pk=readPickFields();if(pk.error){status(pk.error,true);return;}row.picks=pk.picks;row.pick_label=pk.label;row.unique_picks=pk.unique;row.picks_each=pk.each;row.sport=pk.sport;if(INDIV[pk.sport]){row.event=pk.event;row.tour=pk.tour;}if(p&&!pk.picks.includes(p.winningPick))row.winning_pick=null;
     if(!row.name||!(row.buy_in>0)){status('Give the pool a name and a buy-in above $0.',true);return;}
+    for(const[k,id]of[['paypal','fPaypal'],['cashapp','fCashapp'],['venmo','fVenmo']]){const h=cleanHandle($(id).value);if(h&&!okHandle(h)){status('Check the '+APPS[k].label+' username: letters, numbers, - or _ only.',true);$(id).focus();return;}row['pay_'+k]=h||null;}
     status('Saving…');
     // If the sport column hasn't been added in Supabase yet, save without it instead of failing.
-    const noSport=r=>r.error&&/sport|event|tour/i.test(r.error.message||'')&&'sport' in row?(delete row.sport,delete row.event,delete row.tour,status('Saved. To keep pools sorted by sport, run sports-setup.sql in Supabase.'),true):false;
-    if(p){let r=await SB.from('bp_pools').update(row).eq('id',p.id);if(noSport(r))r=await SB.from('bp_pools').update(row).eq('id',p.id);if(r.error){status(friendly(r.error),true);return;}
+    const noSport=r=>{if(!r.error)return false;const m=r.error.message||'';
+      if(/pay_paypal|pay_cashapp|pay_venmo/i.test(m)&&'pay_paypal' in row){const extra=payToText({paypal:row.pay_paypal,cashapp:row.pay_cashapp,venmo:row.pay_venmo},row.pay_info);delete row.pay_paypal;delete row.pay_cashapp;delete row.pay_venmo;row.pay_info=extra.slice(0,80)||null;status('Saved. To turn on the PayPal, Cash App and Venmo pay buttons, run payments-setup.sql in Supabase.');return true;}
+      if(/sport|event|tour/i.test(m)&&'sport' in row){delete row.sport;delete row.event;delete row.tour;status('Saved. To keep pools sorted by sport, run sports-setup.sql in Supabase.');return true;}return false;};
+    if(p){let r=await SB.from('bp_pools').update(row).eq('id',p.id);while(noSport(r))r=await SB.from('bp_pools').update(row).eq('id',p.id);if(r.error){status(friendly(r.error),true);return;}
       const drop=entries.filter(x=>x.place>row.splits.length);for(const x of drop)await SB.from('bp_entries').update({place:0}).eq('id',x.id);
       mode='view';await loadPool();}
-    else{let r=await SB.from('bp_pools').insert({...row,organizer_id:me.id}).select().single();if(noSport(r))r=await SB.from('bp_pools').insert({...row,organizer_id:me.id}).select().single();if(r.error){status(friendly(r.error),true);return;}location.href='?pool='+r.data.id;}
+    else{let r=await SB.from('bp_pools').insert({...row,organizer_id:me.id}).select().single();while(noSport(r))r=await SB.from('bp_pools').insert({...row,organizer_id:me.id}).select().single();if(r.error){status(friendly(r.error),true);return;}location.href='?pool='+r.data.id;}
   });
   setTimeout(()=>{const i=$('fName');if(i)i.focus();},0);
   return el('div',{class:'slip',style:'padding:18px'},[el('h2',{text:(p?'Edit ':'New ')+sportWord(p?p.sport:curSport)+' pool',style:'font-family:var(--display);font-weight:800;font-size:26px;margin:0 0 14px;text-transform:uppercase'}),f]);
@@ -704,11 +750,11 @@ $('outBtn').addEventListener('click',async()=>{await SB.auth.signOut();});
 
 
 // ---- Guided tour: walks through a sample pool (never saved) and highlights each part of the page.
-const DEMO={id:'__demo',name:'Sample football pool',buy_in:20,max_players:0,low_wins:false,splits:[70,30],pay_info:'Venmo @organizer',sport:'nfl',event:'',tour:'',
+const DEMO={id:'__demo',name:'Sample football pool',buy_in:20,max_players:0,low_wins:false,splits:[70,30],pay_info:'',payH:{paypal:'organizer',cashapp:'organizer',venmo:'organizer'},sport:'nfl',event:'',tour:'',
   picks:['Chicago Bears','Dallas Cowboys','Detroit Lions','Kansas City Chiefs'],pickLabel:'Team',uniquePicks:true,picksEach:1,winningPick:'',created_at:''};
 const DEMO_ENTRIES=[{id:'d1',name:'Alex',paid:true,place:0,paidOut:false,payApp:'venmo',payHandle:'alex-p',score:31,chosen:['Detroit Lions']},
   {id:'d2',name:'Jordan',paid:true,place:0,paidOut:false,payApp:'venmo',payHandle:'',score:24,chosen:['Kansas City Chiefs']},
-  {id:'d3',name:'Sam',paid:false,place:0,paidOut:false,payApp:'venmo',payHandle:'',score:17,chosen:['Chicago Bears']}];
+  {id:'d3',name:'Sam',paid:false,sentVia:'cashapp',place:0,paidOut:false,payApp:'venmo',payHandle:'',score:17,chosen:['Chicago Bears']}];
 let tourDemo=null,tour=null;
 const secBy=t=>[...document.querySelectorAll('#main section.block')].find(x=>{const h=x.querySelector('h3');return h&&h.textContent.toLowerCase().includes(t);});
 const labOf=id=>{const e=$(id);return e?e.closest('label'):null;};
@@ -727,14 +773,14 @@ function tourSteps(){
     {sel:()=>labOf('fName'),t:'Name it',b:'Give the pool a name, then set the buy-in and an optional player limit just below.',go:toForm},
     {sel:()=>$('fTeams'),t:'Check the teams',b:'Tick every team that’s in this pool. Players can only pick from the teams you check. Golf and tennis pools load this week’s field instead.',go:toForm},
     {sel:()=>labOf('fSplit'),t:'How the pot pays out',b:'Winner takes all, or split it between the top 2 or 3.',go:toForm},
-    {sel:()=>labOf('fPay'),t:'Where to send money',b:'Add your Venmo or Cash App so players know where to send their buy-in. Then tap Create pool and share the link.',go:toForm});
+    {sel:()=>labOf('fPaypal'),t:'How players pay',b:'Add your PayPal, Cash App and Venmo usernames. Each becomes a pay button with the buy-in filled in. Then tap Create pool and share the link.',go:toForm});
   S.push(
     {sel:()=>document.querySelector('#main .hero'),t:'The pot',b:'Total payout grows with every player who joins. “To join” is the buy-in per person.',go:toDemo},
     {sel:()=>document.querySelector('#main .meter'),t:'Who’s paid',b:'The bar shows how much has been collected and what’s still owed.',go:toDemo},
-    {sel:()=>document.querySelector('#main .payinfo'),t:'Pay the organizer',b:'Tap Copy to grab the organizer’s Venmo or Cash App and send your buy-in.',go:toDemo},
+    {sel:()=>document.querySelector('#main .paybox'),t:'Pay the buy-in',b:'Tap PayPal, Cash App or Venmo. The app opens with the buy-in already filled in. After paying, tap the app you used so the organizer knows to look for it.',go:toDemo},
     {sel:()=>secBy('picks'),t:'Team picks',b:'See who picked each team and which are still open. When the organizer sets the winning team, everyone who picked it takes 1st.',go:toDemo},
     {sel:()=>secBy('who'),t:'Who’s in',b:'Everyone in the pool with their picks, points and whether they’ve paid. The highest score takes 1st automatically.',go:toDemo},
-    {sel:()=>secBy('payouts'),t:'Payouts',b:'What each place wins and who’s in line for it. The organizer pays winners in one tap on Venmo or Cash App.',go:toDemo},
+    {sel:()=>secBy('payouts'),t:'Payouts',b:'What each place wins and who’s in line for it. The organizer pays winners in one tap on PayPal, Cash App or Venmo.',go:toDemo},
     {sel:()=>$('terms'),t:'Pool terms',b:'The promise-to-pay rules everyone agrees to by joining. Tap to read them.',go:toDemo},
     {t:'Game chat and the app',b:'Every pool has a 💬 Game chat button in the corner so everyone can talk during the game. Tap “Get the app” to put Pool Board on your home screen. Replay this tour anytime with “How it works.”',go:toDemo});
   return S;
