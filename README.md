@@ -4,7 +4,7 @@ Betting pools with friends: buy-ins, who's in, the pot, payouts and a live game 
 
 ## Setup (once)
 
-1. In Supabase, open **SQL Editor → New query**, paste `pool-setup.sql`, and run it.
+1. In Supabase, open **SQL Editor → New query**, paste all of `setup-all.sql`, and run it. (It contains every setup file below, in order, and is safe to run again.)
 2. Do the same with `chat-setup.sql` (game chat), `sports-setup.sql` (sport tabs) and `payments-setup.sql` (PayPal, Cash App and Venmo buy-in buttons).
 3. In GitHub, go to **Settings → Pages**, set the source to **Deploy from a branch**, branch **main**, folder **/ (root)**, and save.
 
