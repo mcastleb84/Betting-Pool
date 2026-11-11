@@ -203,6 +203,18 @@ form.grid label.chk input{width:20px;height:20px;flex:none;accent-color:var(--mo
 @media (max-width:420px){.namebox{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
 .topacts{display:flex;gap:8px;flex-wrap:wrap}
+.navbar{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.navbar button{display:inline-flex;align-items:center;gap:6px;padding:8px 14px}
+.navbar .sp{flex:1}
+#refreshBtn.spin .ic{display:inline-block;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#refreshBtn.spin .ic{animation:none}}
+.collect{display:flex;flex-direction:column;gap:0}
+.crow{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line)}
+.crow .wh{display:flex;justify-content:space-between;gap:10px;font-weight:700}
+.crow small{color:var(--gold);font-weight:700}
+.crow .payrow a,.crow .payrow button{padding:7px 12px;font-size:14px}
+a.ghostlink{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;color:var(--ink);text-decoration:none;font-weight:600}
 .tov{position:fixed;inset:0;z-index:1000;background:transparent}
 .tov.dim{background:rgba(0,0,0,.6)}
 .thl{position:fixed;z-index:1001;border-radius:14px;box-shadow:0 0 0 3px var(--money),0 0 0 9999px rgba(0,0,0,.6);pointer-events:none;transition:top .25s,left .25s,width .25s,height .25s}
@@ -257,6 +269,7 @@ body.haschat .wrap{padding-bottom:96px}
 </head>
 <body>
 <div class="wrap">
+  <nav class="navbar" aria-label="Page"><button class="ghost" id="backBtn" hidden><span aria-hidden="true">←</span> Back</button><span class="sp"></span><button class="ghost" id="refreshBtn"><span class="ic" aria-hidden="true">↻</span> Refresh</button></nav>
   <div class="top">
     <div>
       <h1 id="siteName"><a href="./" style="color:inherit;text-decoration:none">Pool Board</a></h1>
@@ -579,6 +592,7 @@ async function act(promise,after){status('Saving…');const r=await promise;if(r
 function render(){
   setTimeout(renderChat,0);
   $('outBtn').hidden=!me;
+  $('backBtn').hidden=!(poolId||mode!=='view')||!!tour;
   const main=$('main');
   if(!SB){main.replaceChildren(el('div',{class:'slip'},[el('div',{class:'empty'},[el('strong',{text:'Not connected yet'}),el('span',{text:'Add your Supabase URL and key to config.js.'})])]));return;}
   if(mode==='form'){main.replaceChildren(formView(poolId&&!tourDemo?pool:null));return;}
@@ -656,6 +670,8 @@ function poolView(){
       el('div',{class:'bar',role:'progressbar','aria-valuemin':'0','aria-valuemax':String(n||1),'aria-valuenow':String(paid),'aria-label':'Buy-ins collected'},[el('i',{style:'width:'+(n?Math.round(paid/n*100):0)+'%'})]),
       n-paid>0?el('div',{class:'row'},[el('span',{text:'Still owed'}),el('b',{text:fmt(pot-got)})]):null]),
     payBox(pool.payH,pool.buy_in,pool.name+' buy-in',pool.pay_info,t=>copyBtn(t))]));
+  // Organizer: collect buy-ins (set up pay buttons, remind or request from anyone who hasn't paid).
+  if(org)f.append(collectView());
   // Organizer: as soon as there are winners, pay each one in one tap.
   if(org&&winners.length)f.append(payWinnersView(winners,prizeOf,pool.name,savePay));
   // Winner: tell them they won and let them say where to get paid.
@@ -723,6 +739,33 @@ function poolView(){
   }
   return f;
 }
+function shareMsg(text){
+  if(navigator.share){navigator.share({text}).catch(()=>{});return;}
+  if(navigator.clipboard)navigator.clipboard.writeText(text).then(()=>status('Reminder copied. Paste it into a text or group chat.')).catch(()=>status(text));else status(text);}
+function collectView(){
+  const ways=payWays(pool.payH),unpaid=entries.filter(x=>!x.paid),owed=Math.round(pool.buy_in*unpaid.length*100)/100,link=poolLink(pool.id);
+  const how=ways.map(k=>APPS[k].label).join(', ').replace(/, ([^,]*)$/,' or $1');
+  const edit=()=>{mode='form';render();setTimeout(()=>{const i=$('fPaypal');if(i){i.scrollIntoView({block:'center'});i.focus();}},50);};
+  const kids=[el('h3',{text:'Collect buy-ins'})];
+  if(!ways.length)kids.push(el('p',{class:'note',style:'margin:0',text:'Players don\'t have pay buttons yet. Add your PayPal, Cash App or Venmo and everyone gets a button that opens the app with the '+fmt(pool.buy_in)+' buy-in filled in.'}),
+    el('div',{},[el('button',{class:'primary',text:'Set up payments',onclick:edit})]));
+  else kids.push(el('p',{class:'note',style:'margin:0',text:'Players pay you with '+how+'. '},[el('button',{class:'linkish',text:'Change',onclick:edit})]));
+  if(!entries.length)kids.push(el('p',{class:'note',style:'margin:0',text:'Nobody has joined yet. Share the pool link below to start collecting.'}));
+  else if(!unpaid.length)kids.push(el('div',{class:'you',text:'Everyone has paid. '+fmt(pool.buy_in*entries.length)+' collected.'}));
+  else{
+    kids.push(el('p',{class:'note',style:'margin:0',text:unpaid.length+' still owe'+(unpaid.length===1?'s':'')+' · '+fmt(owed)+' total. When the money shows up in your app, tap Mark paid.'}),
+      el('div',{},[el('button',{class:'ghost',text:'Remind everyone who hasn\'t paid',onclick:()=>shareMsg('Reminder: the '+fmt(pool.buy_in)+' buy-in for '+pool.name+' is due before the game starts. Still owed by: '+unpaid.map(x=>x.name).join(', ')+'. Pay here: '+link)})]));
+    const box=el('div',{class:'collect'});
+    unpaid.forEach(x=>{const row=el('div',{class:'crow'},[el('div',{class:'wh'},[el('span',{text:x.name}),el('span',{text:fmt(pool.buy_in)})])]);
+      if(x.sentVia)row.append(el('small',{text:'Says sent on '+SENT_LABEL[x.sentVia]+'. Check your app.'}));
+      row.append(el('div',{class:'payrow'},[
+        x.payApp==='venmo'&&x.payHandle?el('a',{class:'ghostlink',href:'https://venmo.com/?txn=charge&audience=private&recipients='+encodeURIComponent(x.payHandle)+'&amount='+pool.buy_in.toFixed(2)+'&note='+encodeURIComponent(pool.name+' buy-in'),target:'_blank',rel:'noopener',text:'Request on Venmo'}):null,
+        el('button',{class:'ghost',text:'Remind',onclick:()=>shareMsg('Hi '+x.name+', your '+fmt(pool.buy_in)+' buy-in for '+pool.name+' is due before the game starts. Pay here: '+link)}),
+        el('button',{class:'primary',text:'Mark paid',onclick:()=>{x.paid=true;render();act(SB.from('bp_entries').update({paid:true}).eq('id',x.id),loadPool);}})]));
+      box.append(row);});
+    kids.push(box);}
+  return el('section',{class:'block'},kids);
+}
 function payWinnersView(ws,prizeOf,poolName,save){
   const due=ws.filter(w=>!w.paidOut),total=due.reduce((a,w)=>a+prizeOf(w),0);
   const kids=[el('h3',{text:due.length?'Pay the winners':'All winners paid'}),
@@ -789,6 +832,13 @@ function formView(p){
 }
 
 $('outBtn').addEventListener('click',async()=>{await SB.auth.signOut();});
+$('backBtn').addEventListener('click',()=>{
+  if(mode!=='view'){mode='view';confirmDel=false;status('');if(poolId&&pool)render();else if(me)loadMine();else render();return;}
+  let same=false;try{same=!!document.referrer&&new URL(document.referrer).origin===location.origin&&new URL(document.referrer).href!==location.href;}catch(e){}
+  if(same&&history.length>1)history.back();else location.href=location.pathname;});
+$('refreshBtn').addEventListener('click',async()=>{const b=$('refreshBtn');if(b.classList.contains('spin'))return;b.classList.add('spin');status('Refreshing…');
+  try{if(!SB)location.reload();else if(mode==='form'){}else if(poolId)await loadPool(true);else if(me)await loadMine();else render();status('Up to date.');setTimeout(()=>{if($('status').textContent==='Up to date.')status('');},2000);}
+  catch(e){status('Couldn\'t refresh. Check your connection.',true);}finally{b.classList.remove('spin');}});
 
 
 // ---- Guided tour: walks through a sample pool (never saved) and highlights each part of the page.
