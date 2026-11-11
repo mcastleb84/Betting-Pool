@@ -299,3 +299,7 @@ grant insert on public.bp_entries to anon, authenticated;
 grant update, delete on public.bp_entries to authenticated;
 grant select on public.bp_pools to anon, authenticated;
 notify pgrst, 'reload schema';
+
+-- Pay-by deadline
+alter table public.bp_pools add column if not exists pay_by timestamptz;
+notify pgrst, 'reload schema';

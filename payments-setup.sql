@@ -41,3 +41,7 @@ begin
 end $$;
 revoke all on function public.bp_set_payout(uuid, uuid, text, text) from public;
 grant execute on function public.bp_set_payout(uuid, uuid, text, text) to anon, authenticated;
+
+-- ===== Pay-by deadline (added later; safe to run again) =====
+alter table public.bp_pools add column if not exists pay_by timestamptz;
+notify pgrst, 'reload schema';
